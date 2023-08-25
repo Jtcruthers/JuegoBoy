@@ -15,16 +15,16 @@ pub struct Cpu {
 impl Cpu {
     pub fn new() -> Cpu {
         Cpu {
-            a: 0,
-            b: 0,
-            c: 0,
-            d: 0,
-            e: 0,
-            f: 0,
-            h: 0,
-            l: 0,
-            sp: 0,
-            pc: 0,
+            a: 0x01,
+            b: 0x00,
+            c: 0x13,
+            d: 0x00,
+            e: 0xD8,
+            f: 0xB0,
+            h: 0x01,
+            l: 0x4D,
+            sp: 0xFFFE,
+            pc: 0x0100,
             memory: [0; 0xFFFF],
         }
     }
@@ -106,6 +106,17 @@ mod tests {
         assert_eq!(cpu.subtract_flag(), false);
         assert_eq!(cpu.half_carry_flag(), false);
         assert_eq!(cpu.carry_flag(), false);
+    }
 
+    #[test]
+    fn test_initial_register_values() {
+        let mut cpu = Cpu::new();
+
+        assert_eq!(cpu.af(), 0x01B0);
+        assert_eq!(cpu.bc(), 0x0013);
+        assert_eq!(cpu.de(), 0x00D8);
+        assert_eq!(cpu.hl(), 0x014D);
+        assert_eq!(cpu.sp, 0xFFFE);
+        assert_eq!(cpu.pc, 0x0100);
     }
 }
