@@ -1,4 +1,4 @@
-pub struct Cpu {
+pub struct CPU {
     a: u8,
     b: u8,
     c: u8,
@@ -9,12 +9,11 @@ pub struct Cpu {
     l: u8,
     sp: usize, // sp and pc should be u16, but since they are pointers (indexing
     pc: usize, // an array) we use usize
-    memory: [u8; 0xFFFF],
 }
 
-impl Cpu {
-    pub fn new() -> Cpu {
-        Cpu {
+impl CPU {
+    pub fn new() -> CPU {
+        CPU {
             a: 0x01,
             b: 0x00,
             c: 0x13,
@@ -129,7 +128,7 @@ mod tests {
 
     #[test]
     fn test_0x07_rotate_a_left() {
-        let mut cpu = Cpu::new();
+        let mut cpu = CPU::new();
 
         cpu.a = 0b10000000;
 
@@ -154,7 +153,7 @@ mod tests {
 
     #[test]
     fn test_0x06_load_u8_into_b() {
-        let mut cpu = Cpu::new();
+        let mut cpu = CPU::new();
 
         cpu.b = 0xFF;
         cpu.pc = 0x0100;
@@ -168,7 +167,7 @@ mod tests {
 
     #[test]
     fn test_0x05_decrement_b() {
-        let mut cpu = Cpu::new();
+        let mut cpu = CPU::new();
 
         cpu.b = 0xFF;
         cpu.f = 0b11110000;
@@ -195,7 +194,7 @@ mod tests {
 
     #[test]
     fn test_0x04_increment_b() {
-        let mut cpu = Cpu::new();
+        let mut cpu = CPU::new();
 
         cpu.b = 0xEE;
         cpu.f = 0b11110000;
@@ -211,7 +210,7 @@ mod tests {
 
     #[test]
     fn test_0x03_increment_bc() {
-        let mut cpu = Cpu::new();
+        let mut cpu = CPU::new();
 
         cpu.b = 0xEE;
         cpu.c = 0xE0;
@@ -223,7 +222,7 @@ mod tests {
 
     #[test]
     fn test_0x02_load_a_into_bc_addr() {
-        let mut cpu = Cpu::new();
+        let mut cpu = CPU::new();
 
         cpu.a = 0xFF;
         cpu.b = 0x12;
@@ -237,7 +236,7 @@ mod tests {
 
     #[test]
     fn test_0x01_load_bc_u16() {
-        let mut cpu = Cpu::new();
+        let mut cpu = CPU::new();
 
         cpu.pc = 0x100;
         cpu.memory[0x100] = 0xDE;
@@ -251,7 +250,7 @@ mod tests {
 
     #[test]
     fn test_8bit_regs_to_16_bit_regs() {
-        let mut cpu = Cpu::new();
+        let mut cpu = CPU::new();
 
         cpu.a = 0xDE;
         cpu.f = 0xAD;
@@ -273,7 +272,7 @@ mod tests {
 
     #[test]
     fn test_set_flags() {
-        let mut cpu = Cpu::new();
+        let mut cpu = CPU::new();
 
         cpu.f = 0x00;
         cpu.set_flags(true, false, false, true);
@@ -293,7 +292,7 @@ mod tests {
 
     #[test]
     fn test_flags() {
-        let mut cpu = Cpu::new();
+        let mut cpu = CPU::new();
 
         cpu.a = 0xDE;
         cpu.f = 0xF0;
@@ -313,7 +312,7 @@ mod tests {
 
     #[test]
     fn test_initial_register_values() {
-        let cpu = Cpu::new();
+        let cpu = CPU::new();
 
         assert_eq!(cpu.af(), 0x01B0);
         assert_eq!(cpu.bc(), 0x0013);
