@@ -70,22 +70,25 @@ impl CPU {
         self.f = (z_flag | n_flag | h_flag | c_flag) << 4;
     }
 
-    fn execute(&mut self, opcode: u8, mmu: &mut MMU) {
+    fn execute(&mut self, opcode: u8, mmu: &mut MMU) -> u8 {
         match opcode {
-            0x00 => (),
+            0x00 => 1,
             0x01 => {
                 self.b = mmu.read_byte(self.pc);
                 self.pc += 1;
                 self.c = mmu.read_byte(self.pc);
                 self.pc += 1;
+                3
             },
             0x02 => {
-                mmu.write_byte(self.bc(), self.a)
+                mmu.write_byte(self.bc(), self.a);
+                1
             },
             0x03 => {
                 let bc = self.bc() + 1;
                 self.b = ((bc & 0xFF00) >> 8) as u8;
                 self.c = (bc & 0xFF) as u8;
+                1
             },
             0x04 => {
                 self.b += 1;
@@ -95,6 +98,7 @@ impl CPU {
                 let h = false; //TODO 
                 let c = self.carry_flag();
                 self.set_flags(z, n, h, c);
+                1
             },
             0x05 => {
                 self.b -= 1;
@@ -104,10 +108,12 @@ impl CPU {
                 let h = false; //TODO 
                 let c = self.carry_flag();
                 self.set_flags(z, n, h, c);
+                1
             },
             0x06 => {
                 self.b = mmu.read_byte(self.pc);
                 self.pc += 1;
+                2
             },
             0x07 => {
                 let c = self.a & 0b10000000 > 0;
@@ -116,9 +122,10 @@ impl CPU {
                 let z = self.a == 0;
                 let n = false;
                 let h = false;
-                self.set_flags(z, n, h, c)
+                self.set_flags(z, n, h, c);
+                1
             },
-            _ => ()
+            _ => panic!("Unknown opcode: 0x{:X}", opcode)
         }
     }
 }
