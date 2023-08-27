@@ -3,16 +3,16 @@ use crate::ppu::PPU;
 use crate::apu::APU;
 use crate::mmu::MMU;
 
-pub struct DMG {
+pub struct Gameboy {
     cpu: CPU,
     apu: APU,
     ppu: PPU,
     mmu: MMU
 }
 
-impl DMG {
+impl Gameboy {
     pub fn new() -> Self {
-        DMG {
+        Gameboy {
             cpu: CPU::new(),
             ppu: PPU::new(),
             apu: APU::new(),
