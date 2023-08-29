@@ -117,6 +117,30 @@ impl CPU {
         (upper << 8) + lower
     }
 
+    fn inc_8_bit_register(&mut self, value: u8) -> u8 {
+        let result = value.wrapping_add(1);
+
+        let z = result == 0;
+        let n = false;
+        let h = result < value;
+        let c = self.carry_flag();
+        self.set_flags(z, n, h, c);
+
+        result
+    }
+
+    fn dec_8_bit_register(&mut self, value: u8) -> u8 {
+        let result = value.wrapping_sub(1);
+
+        let z = result == 0;
+        let n = true;
+        let h = result > value;
+        let c = self.carry_flag();
+        self.set_flags(z, n, h, c);
+
+        result
+    }
+
     pub fn execute(&mut self, opcode: u8, mmu: &mut impl Memory) -> u8 {
         match opcode {
             0x00 => 1,
@@ -132,29 +156,17 @@ impl CPU {
                 2
             }
             0x03 => {
-                let bc = self.bc() + 1;
-                self.b = ((bc & 0xFF00) >> 8) as u8;
-                self.c = (bc & 0xFF) as u8;
+                let (upper, lower) = self.u16_to_u8s(self.bc().wrapping_add(1));
+                self.b = upper;
+                self.c = lower;
                 2
             }
             0x04 => {
-                self.b += 1;
-
-                let z = self.b == 0;
-                let n = false;
-                let h = false; //TODO
-                let c = self.carry_flag();
-                self.set_flags(z, n, h, c);
+                self.b = self.inc_8_bit_register(self.b);
                 1
             }
             0x05 => {
-                self.b -= 1;
-
-                let z = self.b == 0;
-                let n = true;
-                let h = false; //TODO
-                let c = self.carry_flag();
-                self.set_flags(z, n, h, c);
+                self.b = self.dec_8_bit_register(self.b);
                 1
             }
             0x06 => {
@@ -190,21 +202,17 @@ impl CPU {
                 2
             },
             0x0B => {
-                let (upper, lower) = self.u16_to_u8s(self.bc() - 1);
+                let (upper, lower) = self.u16_to_u8s(self.bc().wrapping_sub(1));
                 self.b = upper;
                 self.c = lower;
                 2
             },
             0x0C => {
-                let old_c = self.c;
-                self.c = self.c.wrapping_add(1);
-                self.set_flags(self.c == 0, false, old_c > self.c, self.f & FLAG_MASK_CARRY > 0);
+                self.c = self.inc_8_bit_register(self.c);
                 1
             },
             0x0D => {
-                let old_c = self.c;
-                self.c = self.c.wrapping_sub(1);
-                self.set_flags(self.c == 0, true, old_c < self.c, self.f & FLAG_MASK_CARRY > 0);
+                self.c = self.dec_8_bit_register(self.c);
                 1
             },
             0x0E => {
@@ -218,6 +226,87 @@ impl CPU {
                 self.set_flags(self.a == 0, false, false, carry);
                 1
             },
+            0x10 => {
+                // TODO - implement stop
+                1
+            },
+            0x11 => {
+                let value = self.read_u16(self.pc, mmu);
+                self.pc += 2;
+
+                let (upper, lower) = self.u16_to_u8s(value);
+                self.d = upper;
+                self.e = lower;
+                3
+            },
+            0x12 => {
+                mmu.write_byte(self.de(), self.a);
+                2
+            },
+            0x13 => {
+                let (upper, lower) = self.u16_to_u8s(self.de().wrapping_add(1));
+                self.d = upper;
+                self.e = lower;
+                2
+            },
+            0x14 => {
+                self.d = self.inc_8_bit_register(self.d);
+                1
+            },
+            0x15 => {
+                self.d = self.dec_8_bit_register(self.d);
+                1
+            },
+            0x1C => {
+                self.e = self.inc_8_bit_register(self.e);
+                1
+            },
+            0x1D => {
+                self.e = self.dec_8_bit_register(self.e);
+                1
+            },
+            0x24 => {
+                self.h = self.inc_8_bit_register(self.h);
+                1
+            },
+            0x25 => {
+                self.h = self.dec_8_bit_register(self.h);
+                1
+            },
+            0x2C => {
+                self.l = self.inc_8_bit_register(self.l);
+                1
+            },
+            0x2D => {
+                self.l = self.dec_8_bit_register(self.l);
+                1
+            },
+            0x1B => {
+                let (upper, lower) = self.u16_to_u8s(self.de().wrapping_sub(1));
+                self.d = upper;
+                self.e = lower;
+                2
+            },
+            0x23 => {
+                let (upper, lower) = self.u16_to_u8s(self.hl().wrapping_add(1));
+                self.h = upper;
+                self.l = lower;
+                2
+            },
+            0x2B => {
+                let (upper, lower) = self.u16_to_u8s(self.hl().wrapping_sub(1));
+                self.h = upper;
+                self.l = lower;
+                2
+            },
+            0x33 => {
+                self.sp = self.sp.wrapping_add(1);
+                2
+            },
+            0x3B => {
+                self.sp = self.sp.wrapping_sub(1);
+                2
+            },
             _ => panic!("Unknown opcode: 0x{:X}", opcode),
         }
     }
@@ -227,6 +316,181 @@ impl CPU {
 mod tests {
     use super::*;
     use crate::mmu::TestMMU;
+
+    #[test]
+    fn test_dec_8_bit_registers() {
+        let mut cpu = CPU::new();
+        let mut mmu = TestMMU::new();
+
+        cpu.d = 0x12;
+        cpu.execute(0x15, &mut mmu);
+        assert_eq!(cpu.d, 0x11);
+
+        cpu.d = 0x00;
+        cpu.execute(0x15, &mut mmu);
+        assert_eq!(cpu.d, 0xFF);
+
+        cpu.e = 0x12;
+        cpu.execute(0x1D, &mut mmu);
+        assert_eq!(cpu.e, 0x11);
+
+        cpu.e = 0x00;
+        cpu.execute(0x1D, &mut mmu);
+        assert_eq!(cpu.e, 0xFF);
+
+        cpu.h = 0x12;
+        cpu.execute(0x25, &mut mmu);
+        assert_eq!(cpu.h, 0x11);
+
+        cpu.h = 0x00;
+        cpu.execute(0x25, &mut mmu);
+        assert_eq!(cpu.h, 0xFF);
+
+        cpu.l = 0x12;
+        cpu.execute(0x2D, &mut mmu);
+        assert_eq!(cpu.l, 0x11);
+
+        cpu.l = 0x00;
+        cpu.execute(0x2D, &mut mmu);
+        assert_eq!(cpu.l, 0xFF);
+    }
+
+    #[test]
+    fn test_inc_8_bit_registers() {
+        let mut cpu = CPU::new();
+        let mut mmu = TestMMU::new();
+
+        cpu.d = 0x12;
+        cpu.execute(0x14, &mut mmu);
+        assert_eq!(cpu.d, 0x13);
+
+        cpu.d = 0xFF;
+        cpu.execute(0x14, &mut mmu);
+        assert_eq!(cpu.d, 0x00);
+
+        cpu.e = 0x12;
+        cpu.execute(0x1C, &mut mmu);
+        assert_eq!(cpu.e, 0x13);
+
+        cpu.e = 0xFF;
+        cpu.execute(0x1C, &mut mmu);
+        assert_eq!(cpu.e, 0x00);
+
+        cpu.h = 0x12;
+        cpu.execute(0x24, &mut mmu);
+        assert_eq!(cpu.h, 0x13);
+
+        cpu.h = 0xFF;
+        cpu.execute(0x24, &mut mmu);
+        assert_eq!(cpu.h, 0x00);
+
+        cpu.l = 0x12;
+        cpu.execute(0x2C, &mut mmu);
+        assert_eq!(cpu.l, 0x13);
+
+        cpu.l = 0xFF;
+        cpu.execute(0x2C, &mut mmu);
+        assert_eq!(cpu.l, 0x00);
+    }
+
+    #[test]
+    fn test_dec_16_bit_registers() {
+        let mut cpu = CPU::new();
+        let mut mmu = TestMMU::new();
+
+        cpu.d = 0x12;
+        cpu.e = 0x34;
+        cpu.execute(0x1B, &mut mmu);
+        assert_eq!(cpu.de(), 0x1233);
+
+        cpu.d = 0x00;
+        cpu.e = 0x00;
+        cpu.execute(0x1B, &mut mmu);
+        assert_eq!(cpu.de(), 0xFFFF);
+
+        cpu.h = 0x12;
+        cpu.l = 0x34;
+        cpu.execute(0x2B, &mut mmu);
+        assert_eq!(cpu.hl(), 0x1233);
+
+        cpu.h = 0x00;
+        cpu.l = 0x00;
+        cpu.execute(0x2B, &mut mmu);
+        assert_eq!(cpu.hl(), 0xFFFF);
+
+        cpu.sp = 0x1234;
+        cpu.execute(0x3B, &mut mmu);
+        assert_eq!(cpu.sp, 0x1233);
+
+        cpu.sp = 0x0;
+        cpu.execute(0x3B, &mut mmu);
+        assert_eq!(cpu.sp, 0xFFFF);
+    }
+
+    #[test]
+    fn test_inc_16_bit_registers() {
+        let mut cpu = CPU::new();
+        let mut mmu = TestMMU::new();
+
+        cpu.d = 0x12;
+        cpu.e = 0x34;
+        cpu.execute(0x13, &mut mmu);
+        assert_eq!(cpu.de(), 0x1235);
+
+        cpu.d = 0xFF;
+        cpu.e = 0xFF;
+        cpu.execute(0x13, &mut mmu);
+        assert_eq!(cpu.de(), 0);
+
+        cpu.h = 0x12;
+        cpu.l = 0x34;
+        cpu.execute(0x23, &mut mmu);
+        assert_eq!(cpu.hl(), 0x1235);
+
+        cpu.h = 0xFF;
+        cpu.l = 0xFF;
+        cpu.execute(0x23, &mut mmu);
+        assert_eq!(cpu.hl(), 0);
+
+        cpu.sp = 0x1234;
+        cpu.execute(0x33, &mut mmu);
+        assert_eq!(cpu.sp, 0x1235);
+
+        cpu.sp = 0xFFFF;
+        cpu.execute(0x33, &mut mmu);
+        assert_eq!(cpu.sp, 0);
+    }
+
+    #[test]
+    fn test_0x12_load_a_into_de_ptr() {
+        let mut cpu = CPU::new();
+        let mut mmu = TestMMU::new();
+
+        cpu.a = 0xAB;
+        cpu.d = 0x12;
+        cpu.e = 0x34;
+        mmu.memory[0x1234] = 0x00;
+
+        cpu.execute(0x12, &mut mmu);
+
+        assert_eq!(mmu.memory[0x1234], 0xAB);
+        assert_eq!(cpu.de(), 0x1234);
+    }
+
+    #[test]
+    fn test_0x11_load_u16_into_de() {
+        let mut cpu = CPU::new();
+        let mut mmu = TestMMU::new();
+
+        cpu.pc = 0x0005;
+        mmu.memory[0x0005] = 0x12;
+        mmu.memory[0x0006] = 0x34;
+
+        cpu.execute(0x11, &mut mmu);
+
+        assert_eq!(cpu.de(), 0x1234);
+        assert_eq!(cpu.pc, 0x0007);
+    }
 
     #[test]
     fn test_0x0f_right_rotate_a() {
