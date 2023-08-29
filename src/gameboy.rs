@@ -20,3 +20,9 @@ impl Gameboy {
         }
     }
 }
+
+pub fn test() -> Gameboy {
+    let x = Gameboy::new();
+
+    x
+}

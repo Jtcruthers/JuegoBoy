@@ -1,4 +1,4 @@
-use crate::mmu::MMU;
+use crate::mmu::{MMU, Memory};
 
 pub struct CPU {
     a: u8,
@@ -12,6 +12,11 @@ pub struct CPU {
     sp: u16,
     pc: u16,
 }
+
+const FLAG_MASK_ZERO: u8 = 0b10000000;
+const FLAG_MASK_SUBTRACT: u8 = 0b01000000;
+const FLAG_MASK_HALF_CARRY: u8 = 0b00100000;
+const FLAG_MASK_CARRY: u8 = 0b00010000;
 
 impl CPU {
     pub fn new() -> CPU {
@@ -46,19 +51,19 @@ impl CPU {
     }
 
     fn zero_flag(&self) -> bool {
-        self.f & 0b10000000 > 0
+        self.f & FLAG_MASK_ZERO > 0
     }
 
     fn subtract_flag(&self) -> bool {
-        self.f & 0b01000000 > 0
+        self.f & FLAG_MASK_SUBTRACT > 0
     }
 
     fn half_carry_flag(&self) -> bool {
-        self.f & 0b00100000 > 0
+        self.f & FLAG_MASK_HALF_CARRY > 0
     }
 
     fn carry_flag(&self) -> bool {
-        self.f & 0b00010000 > 0
+        self.f & FLAG_MASK_CARRY > 0
     }
 
     fn set_flags(&mut self, z: bool, n: bool, h: bool, c: bool) {
@@ -70,7 +75,7 @@ impl CPU {
         self.f = (z_flag | n_flag | h_flag | c_flag) << 4;
     }
 
-    fn execute(&mut self, opcode: u8, mmu: &mut MMU) -> u8 {
+    pub fn execute(&mut self, opcode: u8, mmu: &mut impl Memory) -> u8 {
         match opcode {
             0x00 => 1,
             0x01 => {
