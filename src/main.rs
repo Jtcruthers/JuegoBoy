@@ -1,8 +1,8 @@
-mod cpu;
-mod ppu;
 mod apu;
-mod mmu;
+mod cpu;
 mod gameboy;
+mod mmu;
+mod ppu;
 
 fn main() {
     println!("Hello, world!");

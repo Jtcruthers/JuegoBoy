@@ -1,4 +1,4 @@
-use crate::mmu::{MMU, Memory};
+use crate::mmu::{Memory, MMU};
 
 pub struct CPU {
     a: u8,
@@ -84,42 +84,42 @@ impl CPU {
                 self.c = mmu.read_byte(self.pc);
                 self.pc += 1;
                 3
-            },
+            }
             0x02 => {
                 mmu.write_byte(self.bc(), self.a);
                 1
-            },
+            }
             0x03 => {
                 let bc = self.bc() + 1;
                 self.b = ((bc & 0xFF00) >> 8) as u8;
                 self.c = (bc & 0xFF) as u8;
                 1
-            },
+            }
             0x04 => {
                 self.b += 1;
 
                 let z = self.b == 0;
                 let n = false;
-                let h = false; //TODO 
+                let h = false; //TODO
                 let c = self.carry_flag();
                 self.set_flags(z, n, h, c);
                 1
-            },
+            }
             0x05 => {
                 self.b -= 1;
 
                 let z = self.b == 0;
                 let n = true;
-                let h = false; //TODO 
+                let h = false; //TODO
                 let c = self.carry_flag();
                 self.set_flags(z, n, h, c);
                 1
-            },
+            }
             0x06 => {
                 self.b = mmu.read_byte(self.pc);
                 self.pc += 1;
                 2
-            },
+            }
             0x07 => {
                 let c = self.a & 0b10000000 > 0;
                 self.a = self.a << 1;
@@ -129,8 +129,8 @@ impl CPU {
                 let h = false;
                 self.set_flags(z, n, h, c);
                 1
-            },
-            _ => panic!("Unknown opcode: 0x{:X}", opcode)
+            }
+            _ => panic!("Unknown opcode: 0x{:X}", opcode),
         }
     }
 }
@@ -194,7 +194,7 @@ mod tests {
         assert_eq!(cpu.b, 0xFE);
         assert_eq!(cpu.zero_flag(), false); // Not zero
         assert_eq!(cpu.subtract_flag(), true); // Always true
-        //TODO - assert_eq!(cpu.half_carry_flag(), false);
+                                               //TODO - assert_eq!(cpu.half_carry_flag(), false);
         assert_eq!(cpu.carry_flag(), true); // Unaffected
 
         cpu.b = 0x01;
@@ -205,7 +205,7 @@ mod tests {
         assert_eq!(cpu.b, 0x00);
         assert_eq!(cpu.zero_flag(), true); // Not zero
         assert_eq!(cpu.subtract_flag(), true); // Always true
-        //TODO - assert_eq!(cpu.half_carry_flag(), false);
+                                               //TODO - assert_eq!(cpu.half_carry_flag(), false);
         assert_eq!(cpu.carry_flag(), false); // Unaffected
     }
 
@@ -222,7 +222,7 @@ mod tests {
         assert_eq!(cpu.b, 0xEF);
         assert_eq!(cpu.zero_flag(), false); // Not zero
         assert_eq!(cpu.subtract_flag(), false); // Reset
-        //TODO - assert_eq!(cpu.half_carry_flag(), false);
+                                                //TODO - assert_eq!(cpu.half_carry_flag(), false);
         assert_eq!(cpu.carry_flag(), true); // Unaffected
     }
 

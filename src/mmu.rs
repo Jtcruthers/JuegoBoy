@@ -26,10 +26,10 @@ impl Memory for MMU {
             0xA000..=0xBFFF => 0, //TODO - cartridge ram
             0xC000..=0xDFFF => self.wram[address as usize],
             0xE000..=0xFDFF => self.wram[address as usize - 0x2000], // echo RAM
-            0xFE00..=0xFE9F => 0, //TODO - OAM
-            0xFEA0..=0xFEFF => 0, // Not usable
-            0xFF00..=0xFF7F => 0, //TODO - I/O
-            0xFF80..=0xFFFE => 0, //TODO - High ram (?)
+            0xFE00..=0xFE9F => 0,                                    //TODO - OAM
+            0xFEA0..=0xFEFF => 0,                                    // Not usable
+            0xFF00..=0xFF7F => 0,                                    //TODO - I/O
+            0xFF80..=0xFFFE => 0,                                    //TODO - High ram (?)
             0xFFFF => 0, //TODO - Interrupt enable register
         }
     }
@@ -41,11 +41,11 @@ impl Memory for MMU {
             0x8000..=0x9FFF => self.vram[address as usize] = value,
             0xA000..=0xBFFF => (), //TODO - cartridge ram
             0xC000..=0xDFFF => self.wram[address as usize] = value,
-            0xE000..=0xFDFF => self.wram[address as usize - 0x2000] = value, // should echo set?
-            0xFE00..=0xFE9F => (), //TODO - OAM
-            0xFEA0..=0xFEFF => (), // Not usable
-            0xFF00..=0xFF7F => (), //TODO - I/O
-            0xFF80..=0xFFFE => (), //TODO - High ram (?)
+            0xE000..=0xFDFF => self.wram[address as usize - 0x2000] = value, // echo ram
+            0xFE00..=0xFE9F => (),                                           //TODO - OAM
+            0xFEA0..=0xFEFF => (),                                           // Not usable
+            0xFF00..=0xFF7F => (),                                           //TODO - I/O
+            0xFF80..=0xFFFE => (),                                           //TODO - High ram (?)
             0xFFFF => (), //TODO - Interrupt enable register
         }
     }

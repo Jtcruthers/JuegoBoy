@@ -1,13 +1,13 @@
-use crate::cpu::CPU;
-use crate::ppu::PPU;
 use crate::apu::APU;
+use crate::cpu::CPU;
 use crate::mmu::MMU;
+use crate::ppu::PPU;
 
 pub struct Gameboy {
     cpu: CPU,
     apu: APU,
     ppu: PPU,
-    mmu: MMU
+    mmu: MMU,
 }
 
 impl Gameboy {
