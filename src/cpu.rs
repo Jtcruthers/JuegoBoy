@@ -138,11 +138,12 @@ impl CPU {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mmu::TestMMU;
 
     #[test]
     fn test_0x07_rotate_a_left() {
         let mut cpu = CPU::new();
-        let mut mmu = MMU::new();
+        let mut mmu = TestMMU::new();
 
         cpu.a = 0b10000000;
 
@@ -168,7 +169,7 @@ mod tests {
     #[test]
     fn test_0x06_load_u8_into_b() {
         let mut cpu = CPU::new();
-        let mut mmu = MMU::new();
+        let mut mmu = TestMMU::new();
 
         cpu.b = 0xFF;
         cpu.pc = 0x0100;
@@ -183,7 +184,7 @@ mod tests {
     #[test]
     fn test_0x05_decrement_b() {
         let mut cpu = CPU::new();
-        let mut mmu = MMU::new();
+        let mut mmu = TestMMU::new();
 
         cpu.b = 0xFF;
         cpu.f = 0b11110000;
@@ -211,7 +212,7 @@ mod tests {
     #[test]
     fn test_0x04_increment_b() {
         let mut cpu = CPU::new();
-        let mut mmu = MMU::new();
+        let mut mmu = TestMMU::new();
 
         cpu.b = 0xEE;
         cpu.f = 0b11110000;
@@ -228,7 +229,7 @@ mod tests {
     #[test]
     fn test_0x03_increment_bc() {
         let mut cpu = CPU::new();
-        let mut mmu = MMU::new();
+        let mut mmu = TestMMU::new();
 
         cpu.b = 0xEE;
         cpu.c = 0xE0;
@@ -241,7 +242,7 @@ mod tests {
     #[test]
     fn test_0x02_load_a_into_bc_addr() {
         let mut cpu = CPU::new();
-        let mut mmu = MMU::new();
+        let mut mmu = TestMMU::new();
 
         cpu.a = 0xFF;
         cpu.b = 0x12;
@@ -256,7 +257,7 @@ mod tests {
     #[test]
     fn test_0x01_load_bc_u16() {
         let mut cpu = CPU::new();
-        let mut mmu = MMU::new();
+        let mut mmu = TestMMU::new();
 
         cpu.pc = 0x100;
         mmu.write_byte(0x100, 0xDE);
