@@ -1,25 +1,5 @@
 use crate::mmu::{Memory, MMU};
 
-enum Register8 {
-    A,
-    B,
-    C,
-    D,
-    E,
-    F,
-    H,
-    L,
-}
-
-enum Register16 {
-    AF,
-    BC,
-    DE,
-    HL,
-    SP,
-    PC,
-}
-
 pub struct CPU {
     a: u8,
     b: u8,
@@ -37,14 +17,6 @@ const FLAG_MASK_ZERO: u8 = 0b10000000;
 const FLAG_MASK_SUBTRACT: u8 = 0b01000000;
 const FLAG_MASK_HALF_CARRY: u8 = 0b00100000;
 const FLAG_MASK_CARRY: u8 = 0b00010000;
-
-fn add_16_reg() {
-
-}
-
-fn add(a: u8) {
-
-}
 
 impl CPU {
     pub fn new() -> CPU {
@@ -175,9 +147,9 @@ impl CPU {
                 2
             }
             0x07 => {
-                let c = self.a & 0b10000000 > 0;
-                self.a = self.a << 1;
-                self.set_flags(self.a == 0, false, false, c);
+                let carry_bit = (self.a & 0b10000000) >> 7;
+                self.a = (self.a << 1) + carry_bit;
+                self.set_flags(false, false, false, carry_bit > 0);
                 1
             },
             0x08 => {
@@ -221,9 +193,9 @@ impl CPU {
                 2
             },
             0x0F => {
-                let carry = self.a & 1 > 0;
-                self.a = self.a >> 1;
-                self.set_flags(self.a == 0, false, false, carry);
+                let carry_bit = self.a & 1;
+                self.a = (self.a >> 1) + (carry_bit << 7);
+                self.set_flags(false, false, false, carry_bit > 0);
                 1
             },
             0x10 => {
@@ -257,6 +229,24 @@ impl CPU {
                 self.d = self.dec_8_bit_register(self.d);
                 1
             },
+            0x16 => {
+                self.d = mmu.read_byte(self.pc);
+                self.pc += 1;
+                2
+            },
+            0x17 => {
+                let old_carry = if self.carry_flag() { 1 } else { 0 };
+                let new_carry = self.a & 0b10000000 > 0;
+                self.a = (self.a << 1) + old_carry;
+                self.set_flags(false, false, false, new_carry);
+                1
+            },
+            0x1B => {
+                let (upper, lower) = self.u16_to_u8s(self.de().wrapping_sub(1));
+                self.d = upper;
+                self.e = lower;
+                2
+            },
             0x1C => {
                 self.e = self.inc_8_bit_register(self.e);
                 1
@@ -264,6 +254,24 @@ impl CPU {
             0x1D => {
                 self.e = self.dec_8_bit_register(self.e);
                 1
+            },
+            0x1E => {
+                self.e = mmu.read_byte(self.pc);
+                self.pc += 1;
+                2
+            },
+            0x1F => {
+                let old_carry = if self.carry_flag() { 1 } else { 0 };
+                let new_carry = self.a & 1 > 0;
+                self.a = (self.a >> 1) + (old_carry << 7);
+                self.set_flags(false, false, false, new_carry);
+                1
+            },
+            0x23 => {
+                let (upper, lower) = self.u16_to_u8s(self.hl().wrapping_add(1));
+                self.h = upper;
+                self.l = lower;
+                2
             },
             0x24 => {
                 self.h = self.inc_8_bit_register(self.h);
@@ -273,6 +281,17 @@ impl CPU {
                 self.h = self.dec_8_bit_register(self.h);
                 1
             },
+            0x26 => {
+                self.h = mmu.read_byte(self.pc);
+                self.pc += 1;
+                2
+            },
+            0x2B => {
+                let (upper, lower) = self.u16_to_u8s(self.hl().wrapping_sub(1));
+                self.h = upper;
+                self.l = lower;
+                2
+            },
             0x2C => {
                 self.l = self.inc_8_bit_register(self.l);
                 1
@@ -281,22 +300,9 @@ impl CPU {
                 self.l = self.dec_8_bit_register(self.l);
                 1
             },
-            0x1B => {
-                let (upper, lower) = self.u16_to_u8s(self.de().wrapping_sub(1));
-                self.d = upper;
-                self.e = lower;
-                2
-            },
-            0x23 => {
-                let (upper, lower) = self.u16_to_u8s(self.hl().wrapping_add(1));
-                self.h = upper;
-                self.l = lower;
-                2
-            },
-            0x2B => {
-                let (upper, lower) = self.u16_to_u8s(self.hl().wrapping_sub(1));
-                self.h = upper;
-                self.l = lower;
+            0x2E => {
+                self.l = mmu.read_byte(self.pc);
+                self.pc += 1;
                 2
             },
             0x33 => {
@@ -316,6 +322,126 @@ impl CPU {
 mod tests {
     use super::*;
     use crate::mmu::TestMMU;
+
+    #[test]
+    fn test_0x1f_rra_rotate_a_right_carry() {
+        let mut cpu = CPU::new();
+        let mut mmu = TestMMU::new();
+
+        cpu.f = 0b00000000;
+        cpu.a = 0b00000001;
+
+        cpu.execute(0x1F, &mut mmu);
+
+        assert_eq!(cpu.a, 0b00000000);
+        assert_eq!(cpu.zero_flag(), false); // Reset
+        assert_eq!(cpu.subtract_flag(), false); // Reset
+        assert_eq!(cpu.half_carry_flag(), false); // Reset
+        assert_eq!(cpu.carry_flag(), true);
+
+        cpu.f = 0b00010000;
+        cpu.a = 0b11111110;
+
+        cpu.execute(0x1F, &mut mmu);
+
+        assert_eq!(cpu.a, 0b11111111);
+        assert_eq!(cpu.zero_flag(), false); // Reset
+        assert_eq!(cpu.subtract_flag(), false); // Reset
+        assert_eq!(cpu.half_carry_flag(), false); // Reset
+        assert_eq!(cpu.carry_flag(), false);
+
+        cpu.f = 0b00000000;
+        cpu.a = 0b11111110;
+
+        cpu.execute(0x1F, &mut mmu);
+
+        assert_eq!(cpu.a, 0b01111111);
+        assert_eq!(cpu.zero_flag(), false); // Reset
+        assert_eq!(cpu.subtract_flag(), false); // Reset
+        assert_eq!(cpu.half_carry_flag(), false); // Reset
+        assert_eq!(cpu.carry_flag(), false);
+    }
+
+    #[test]
+    fn test_0x17_rla_rotate_a_left_carry() {
+        let mut cpu = CPU::new();
+        let mut mmu = TestMMU::new();
+
+        cpu.f = 0b00000000;
+        cpu.a = 0b10000000;
+
+        cpu.execute(0x17, &mut mmu);
+
+        assert_eq!(cpu.a, 0b00000000);
+        assert_eq!(cpu.zero_flag(), false); // Reset
+        assert_eq!(cpu.subtract_flag(), false); // Reset
+        assert_eq!(cpu.half_carry_flag(), false); // Reset
+        assert_eq!(cpu.carry_flag(), true);
+
+        cpu.f = 0b00010000;
+        cpu.a = 0b01111111;
+
+        cpu.execute(0x17, &mut mmu);
+
+        assert_eq!(cpu.a, 0b11111111);
+        assert_eq!(cpu.zero_flag(), false); // Reset
+        assert_eq!(cpu.subtract_flag(), false); // Reset
+        assert_eq!(cpu.half_carry_flag(), false); // Reset
+        assert_eq!(cpu.carry_flag(), false);
+
+        cpu.f = 0b00000000;
+        cpu.a = 0b01111111;
+
+        cpu.execute(0x17, &mut mmu);
+
+        assert_eq!(cpu.a, 0b11111110);
+        assert_eq!(cpu.zero_flag(), false); // Reset
+        assert_eq!(cpu.subtract_flag(), false); // Reset
+        assert_eq!(cpu.half_carry_flag(), false); // Reset
+        assert_eq!(cpu.carry_flag(), false);
+    }
+
+    #[test]
+    fn test_load_u8_into_register() {
+        let mut cpu = CPU::new();
+        let mut mmu = TestMMU::new();
+
+        cpu.d = 0xFF;
+        cpu.pc = 0x0100;
+        mmu.write_byte(0x0100, 0xAB);
+
+        cpu.execute(0x16, &mut mmu);
+
+        assert_eq!(cpu.d, 0xAB);
+        assert_eq!(cpu.pc, 0x0101);
+
+        cpu.e = 0xFF;
+        cpu.pc = 0x0100;
+        mmu.write_byte(0x0100, 0xAB);
+
+        cpu.execute(0x1E, &mut mmu);
+
+        assert_eq!(cpu.e, 0xAB);
+        assert_eq!(cpu.pc, 0x0101);
+
+        cpu.l = 0xFF;
+        cpu.pc = 0x0100;
+        mmu.write_byte(0x0100, 0xAB);
+
+        cpu.execute(0x2E, &mut mmu);
+
+        assert_eq!(cpu.l, 0xAB);
+        assert_eq!(cpu.pc, 0x0101);
+
+        cpu.h = 0xFF;
+        cpu.pc = 0x0100;
+        mmu.write_byte(0x0100, 0xAB);
+
+        cpu.execute(0x26, &mut mmu);
+
+        assert_eq!(cpu.l, 0xAB);
+        assert_eq!(cpu.pc, 0x0101);
+    }
 
     #[test]
     fn test_dec_8_bit_registers() {
@@ -493,7 +619,7 @@ mod tests {
     }
 
     #[test]
-    fn test_0x0f_right_rotate_a() {
+    fn test_0x0f_rrca_right_rotate_a_circular() {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
@@ -502,14 +628,15 @@ mod tests {
         cpu.execute(0x0F, &mut mmu);
 
         assert_eq!(cpu.a, 0b01111111);
+        assert_eq!(cpu.zero_flag(), false);
         assert_eq!(cpu.carry_flag(), false);
 
         cpu.a = 0b00000001;
 
         cpu.execute(0x0F, &mut mmu);
 
-        assert_eq!(cpu.a, 0b00000000);
-        assert_eq!(cpu.zero_flag(), true);
+        assert_eq!(cpu.a, 0b10000000);
+        assert_eq!(cpu.zero_flag(), false);
         assert_eq!(cpu.carry_flag(), true);
     }
 
@@ -648,7 +775,7 @@ mod tests {
     }
 
     #[test]
-    fn test_0x07_rotate_a_left() {
+    fn test_0x07_rlca_rotate_a_left_circular() {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
@@ -656,8 +783,8 @@ mod tests {
 
         cpu.execute(0x07, &mut mmu);
 
-        assert_eq!(cpu.a, 0x00);
-        assert_eq!(cpu.zero_flag(), true);
+        assert_eq!(cpu.a, 0b00000001);
+        assert_eq!(cpu.zero_flag(), false); // Reset
         assert_eq!(cpu.subtract_flag(), false); // Reset
         assert_eq!(cpu.half_carry_flag(), false); // Reset
         assert_eq!(cpu.carry_flag(), true);
@@ -667,7 +794,7 @@ mod tests {
         cpu.execute(0x07, &mut mmu);
 
         assert_eq!(cpu.a, 0b11111110);
-        assert_eq!(cpu.zero_flag(), false);
+        assert_eq!(cpu.zero_flag(), false); // Reset
         assert_eq!(cpu.subtract_flag(), false); // Reset
         assert_eq!(cpu.half_carry_flag(), false); // Reset
         assert_eq!(cpu.carry_flag(), false);
