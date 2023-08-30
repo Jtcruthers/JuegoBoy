@@ -113,6 +113,19 @@ impl CPU {
         result
     }
 
+    fn call(&mut self, condition: bool, mmu: &mut impl Memory) -> u8 {
+        if condition {
+            let address = self.read_u16(self.pc, mmu);
+            self.push(address, mmu);
+            self.pc += 2;
+
+            6
+        } else {
+            self.pc += 2;
+            3
+        }
+    }
+
     fn jump_relative(&mut self, condition: bool, mmu: &mut impl Memory) -> u8 {
         let offset = mmu.read_byte(self.pc) as i8;
         if condition {
@@ -146,7 +159,9 @@ impl CPU {
         2
     }
 
-    fn halt(&mut self) {}
+    fn halt(&mut self) {
+        todo!();
+    }
 
     fn add_a(&mut self, value: u8) {
         let old_a = self.a;
@@ -191,7 +206,13 @@ impl CPU {
         }
         2
     }
-    
+
+    fn restart(&mut self, address: u16, mmu: &mut impl Memory) -> u8 {
+        self.push(self.pc, mmu);
+        self.pc = address;
+        4
+    }
+
     fn pop(&mut self, mmu: &mut impl Memory) -> (u8, u8) {
         let value = self.read_u16(self.sp, mmu);
         self.sp += 2;
@@ -284,10 +305,7 @@ impl CPU {
                 self.set_flags(false, false, false, carry_bit > 0);
                 1
             }
-            0x10 => {
-                // TODO - implement stop
-                1
-            }
+            0x10 => { todo!(); }
             0x11 => {
                 self.e = mmu.read_byte(self.pc);
                 self.d = mmu.read_byte(self.pc + 1);
@@ -391,7 +409,7 @@ impl CPU {
                 2
             }
             0x27 => {
-                panic!("TODO")
+                todo!();
             }
             0x28 => self.jump_relative(self.zero_flag(), mmu),
             0x29 => self.add_u16_to_hl(self.hl()),
@@ -721,7 +739,7 @@ impl CPU {
             0x76 => {
                 self.halt();
                 1
-            } //TODO HALT
+            }
             0x77 => {
                 mmu.write_byte(self.hl(), self.a);
                 2
@@ -1031,12 +1049,40 @@ impl CPU {
                 3
             }
             0xC2 => { self.jump_abs(!self.zero_flag(), mmu) }
-            0xC3 => { self.jump_abs(true, mmu) }
+            0xC3 => {
+                self.jump_abs(true, mmu)
+            }
+            0xC4 => {
+                self.call(!self.zero_flag(), mmu)
+            }
             0xC5 => {
                 self.push(self.bc(), mmu);
                 4
             }
+            0xC6 => {
+                let value = mmu.read_byte(self.pc);
+                self.pc += 1;
+                self.add_a(value);
+                2
+            }
+            0xC7 => { self.restart(0, mmu) }
+            0xC8 => self.ret(self.zero_flag(), mmu),
+            0xC9 => {
+                self.ret(true, mmu);
+                4
+            }
             0xCA => { self.jump_abs(self.zero_flag(), mmu) }
+            0xCB => { todo!() }
+            0xCC => { self.call(self.zero_flag(), mmu) }
+            0xCD => { self.call(true, mmu) }
+            0xCE => {
+                let value = mmu.read_byte(self.pc) + self.carry_flag() as u8;
+                self.pc += 1;
+                self.add_a(value);
+                2
+            }
+            0xCF => { self.restart(0x08, mmu) }
+            0xD0 => self.ret(!self.carry_flag(), mmu),
             0xD1 => {
                 let (upper, lower) = self.pop(mmu);
                 self.d = upper;
@@ -1044,24 +1090,97 @@ impl CPU {
                 3
             }
             0xD2 => { self.jump_abs(!self.carry_flag(), mmu) }
+            0xD3 => { panic!("Unsupported OPCODE") }
+            0xD4 => {
+                self.call(!self.carry_flag(), mmu)
+            }
             0xD5 => {
                 self.push(self.de(), mmu);
                 4
             }
+            0xD6 => {
+                let value = mmu.read_byte(self.pc);
+                self.pc += 1;
+                self.sub_a(value);
+                2
+            }
+            0xD7 => { self.restart(0x10, mmu) }
+            0xD8 => self.ret(self.carry_flag(), mmu),
+            0xD9 => { todo!() }
             0xDA => { self.jump_abs(self.carry_flag(), mmu) }
+            0xDB => { panic!("Unsupported OPCODE") }
+            0xDC => {
+                self.call(self.carry_flag(), mmu)
+            }
+            0xDD => { panic!("Unsupported OPCODE") }
+            0xDE => {
+                let value = mmu.read_byte(self.pc) + self.carry_flag() as u8;
+                self.pc += 1;
+                self.sub_a(value);
+                2
+            }
+            0xDF => { self.restart(0x18, mmu) }
+            0xE0 => {
+                let address = 0xFF00 + mmu.read_byte(self.pc) as u16;
+                self.pc += 1;
+                mmu.write_byte(address, self.a);
+                3
+            }
             0xE1 => {
                 let (upper, lower) = self.pop(mmu);
                 self.h = upper;
                 self.l = lower;
                 3
             }
+            0xE2 => {
+                let address = 0xFF00 + self.c as u16;
+                mmu.write_byte(address, self.a);
+                2
+            }
+            0xE3 => { panic!("Unsupported OPCODE") }
+            0xE4 => { panic!("Unsupported OPCODE") }
             0xE5 => {
                 self.push(self.hl(), mmu);
+                4
+            }
+            0xE6 => {
+                let value = mmu.read_byte(self.pc);
+                self.pc += 1;
+                self.and_a(value);
+                2
+            }
+            0xE7 => { self.restart(0x20, mmu) }
+            0xE8 => {
+                let offset = mmu.read_byte(self.pc) as i16;
+                self.pc += 1;
+                self.sp = (self.sp as i16 + offset as i16) as u16;
                 4
             }
             0xE9 => {
                 self.pc = self.read_u16(self.hl(), mmu);
                 4
+            }
+            0xEA => {
+                let address = self.read_u16(self.pc, mmu);
+                self.pc += 2;
+                mmu.write_byte(address, self.a);
+                4
+            }
+            0xEB => { panic!("Unsupported OPCODE") }
+            0xEC => { panic!("Unsupported OPCODE") }
+            0xED => { panic!("Unsupported OPCODE") }
+            0xEE => {
+                let value = mmu.read_byte(self.pc);
+                self.pc += 1;
+                self.xor_a(value);
+                2
+            }
+            0xEF => { self.restart(0x28, mmu) }
+            0xF0 => {
+                let address = 0xFF00 + mmu.read_byte(self.pc) as u16;
+                self.pc += 1;
+                self.a = mmu.read_byte(address);
+                3
             }
             0xF1 => {
                 let (upper, lower) = self.pop(mmu);
@@ -1069,12 +1188,53 @@ impl CPU {
                 self.f = lower;
                 3
             }
+            0xF2 => {
+                let address = 0xFF00 + self.c as u16;
+                self.a = mmu.read_byte(address);
+                2
+            }
+            0xF3 => { todo!() }
+            0xF4 => { panic!("Unsupported OPCODE") }
             0xF5 => {
                 self.push(self.af(), mmu);
                 4
             }
-
-            _ => panic!("OPCODE 0x{:X} not implemented", opcode),
+            0xF6 => {
+                let value = mmu.read_byte(self.pc);
+                self.pc += 1;
+                self.or_a(value);
+                2
+            }
+            0xF7 => { self.restart(0x30, mmu) }
+            0xF8 => {
+                let offset = mmu.read_byte(self.pc) as i16;
+                self.pc += 1;
+                let value = (self.sp as i16 + offset) as u16;
+                let (upper, lower) = self.u16_to_u8s(value);
+                self.h = upper;
+                self.l = lower;
+                3
+            }
+            0xF9 => {
+                self.sp = self.hl();
+                2
+            }
+            0xFA => {
+                let address = self.read_u16(self.pc, mmu);
+                self.pc += 2;
+                self.a = mmu.read_byte(address);
+                4
+            }
+            0xFB => { todo!() }
+            0xFC => { panic!("Unsupported OPCODE") }
+            0xFD => { panic!("Unsupported OPCODE") }
+            0xFE => {
+                let value = mmu.read_byte(self.pc);
+                self.pc += 1;
+                self.cp_a(value);
+                2
+            }
+            0xFF => { self.restart(0x38, mmu) }
         }
     }
 }
@@ -1086,6 +1246,41 @@ mod tests {
 
     fn get_cpu_and_mmu() -> (CPU, TestMMU) {
         (CPU::new(), TestMMU::new())
+    }
+
+    #[test]
+    fn test_call() {
+        let (mut cpu, mut mmu) = get_cpu_and_mmu();
+
+        cpu.pc = 0x0;
+        mmu.memory[0x0] = 0xCD;
+        mmu.memory[0x1] = 0xAB;
+        cpu.sp = 0x102;
+        mmu.memory[0x100] = 0x00;
+        mmu.memory[0x101] = 0x00;
+
+        let cycles = cpu.call(true, &mut mmu);
+
+        assert_eq!(cycles, 6);
+        assert_eq!(cpu.pc, 2);
+        assert_eq!(cpu.sp, 0x100);
+        assert_eq!(mmu.memory[0x100], 0xCD);
+        assert_eq!(mmu.memory[0x101], 0xAB);
+
+        cpu.pc = 0x0;
+        mmu.memory[0x0] = 0xCD;
+        mmu.memory[0x1] = 0xAB;
+        cpu.sp = 0x102;
+        mmu.memory[0x100] = 0x00;
+        mmu.memory[0x101] = 0x00;
+
+        let cycles = cpu.call(false, &mut mmu);
+
+        assert_eq!(cycles, 3);
+        assert_eq!(cpu.pc, 2);
+        assert_eq!(cpu.sp, 0x102);
+        assert_eq!(mmu.memory[0x100], 0x00);
+        assert_eq!(mmu.memory[0x101], 0x00);
     }
 
     #[test]
@@ -1114,6 +1309,30 @@ mod tests {
         assert_eq!(mmu.memory[0x0000], 0xCD);
         assert_eq!(mmu.memory[0x0001], 0xAB);
         assert_eq!(cpu.sp, 0);
+    }
+
+    #[test]
+    fn test_restart() {
+        let (mut cpu, mut mmu) = get_cpu_and_mmu();
+
+        cpu.pc = 0x1234;
+        cpu.sp = 2;
+        mmu.memory[0] = 0x00;
+        mmu.memory[1] = 0x00;
+        cpu.restart(0, &mut mmu);
+        assert_eq!(cpu.pc, 0);
+        assert_eq!(cpu.sp, 0);
+        assert_eq!(mmu.memory[1], 0x12);
+        assert_eq!(mmu.memory[0], 0x34);
+
+        cpu.pc = 0x1234;
+        cpu.sp = 2;
+        mmu.memory[0] = 0x00;
+        mmu.memory[1] = 0x00;
+        cpu.restart(0x40, &mut mmu);
+        assert_eq!(cpu.pc, 0x40);
+        assert_eq!(mmu.memory[1], 0x12);
+        assert_eq!(mmu.memory[0], 0x34);
     }
 
     #[test]
