@@ -113,13 +113,25 @@ impl CPU {
         result
     }
 
-    fn jump(&mut self, condition: bool, mmu: &mut impl Memory) -> u8 {
+    fn jump_relative(&mut self, condition: bool, mmu: &mut impl Memory) -> u8 {
         let offset = mmu.read_byte(self.pc) as i8;
         if condition {
             self.pc = ((self.pc as i16) + offset as i16) as u16;
             3
         } else {
+            self.pc += 1;
             2
+        }
+    }
+
+    fn jump_abs(&mut self, condition: bool, mmu: &mut impl Memory) -> u8 {
+        if condition {
+            let address = self.read_u16(self.pc, mmu);
+            self.pc = address;
+            4
+        } else {
+            self.pc += 2;
+            3
         }
     }
 
@@ -312,7 +324,7 @@ impl CPU {
                 self.set_flags(false, false, false, new_carry);
                 1
             }
-            0x18 => self.jump(true, mmu),
+            0x18 => self.jump_relative(true, mmu),
             0x19 => self.add_u16_to_hl(self.de()),
             0x1A => {
                 self.a = mmu.read_byte(self.de());
@@ -344,7 +356,7 @@ impl CPU {
                 self.set_flags(false, false, false, new_carry);
                 1
             }
-            0x20 => self.jump(!self.zero_flag(), mmu),
+            0x20 => self.jump_relative(!self.zero_flag(), mmu),
             0x21 => {
                 self.l = mmu.read_byte(self.pc);
                 self.pc += 1;
@@ -381,7 +393,7 @@ impl CPU {
             0x27 => {
                 panic!("TODO")
             }
-            0x28 => self.jump(self.zero_flag(), mmu),
+            0x28 => self.jump_relative(self.zero_flag(), mmu),
             0x29 => self.add_u16_to_hl(self.hl()),
             0x2A => {
                 self.a = mmu.read_byte(self.hl());
@@ -414,7 +426,7 @@ impl CPU {
                 self.set_flags(self.zero_flag(), true, true, self.carry_flag());
                 1
             }
-            0x30 => self.jump(!self.carry_flag(), mmu),
+            0x30 => self.jump_relative(!self.carry_flag(), mmu),
             0x31 => {
                 self.sp = self.read_u16(self.pc, mmu);
                 self.pc += 2;
@@ -453,7 +465,7 @@ impl CPU {
                 self.set_flags(self.zero_flag(), false, false, true);
                 1
             }
-            0x38 => self.jump(self.carry_flag(), mmu),
+            0x38 => self.jump_relative(self.carry_flag(), mmu),
             0x39 => self.add_u16_to_hl(self.sp),
             0x3A => {
                 self.a = mmu.read_byte(self.hl());
@@ -1018,20 +1030,25 @@ impl CPU {
                 self.c = lower;
                 3
             }
+            0xC2 => { self.jump_abs(!self.zero_flag(), mmu) }
+            0xC3 => { self.jump_abs(true, mmu) }
             0xC5 => {
                 self.push(self.bc(), mmu);
                 4
             }
+            0xCA => { self.jump_abs(self.zero_flag(), mmu) }
             0xD1 => {
                 let (upper, lower) = self.pop(mmu);
                 self.d = upper;
                 self.e = lower;
                 3
             }
+            0xD2 => { self.jump_abs(!self.carry_flag(), mmu) }
             0xD5 => {
                 self.push(self.de(), mmu);
                 4
             }
+            0xDA => { self.jump_abs(self.carry_flag(), mmu) }
             0xE1 => {
                 let (upper, lower) = self.pop(mmu);
                 self.h = upper;
@@ -1040,6 +1057,10 @@ impl CPU {
             }
             0xE5 => {
                 self.push(self.hl(), mmu);
+                4
+            }
+            0xE9 => {
+                self.pc = self.read_u16(self.hl(), mmu);
                 4
             }
             0xF1 => {
@@ -1053,7 +1074,7 @@ impl CPU {
                 4
             }
 
-            _ => panic!("Unknown opcode: 0x{:X}", opcode),
+            _ => panic!("OPCODE 0x{:X} not implemented", opcode),
         }
     }
 }
@@ -1233,7 +1254,7 @@ mod tests {
     }
 
     #[test]
-    fn test_0x38_jump_carry() {
+    fn test_0x38_jump_relative_carry() {
         let (mut cpu, mut mmu) = get_cpu_and_mmu();
         cpu.f = 0 | FLAG_MASK_CARRY;
         cpu.pc = 0;
@@ -1246,7 +1267,7 @@ mod tests {
     }
 
     #[test]
-    fn test_0x37_jump_carry() {
+    fn test_0x37_jump_relative_carry() {
         let (mut cpu, mut mmu) = get_cpu_and_mmu();
         cpu.f = 0;
 
@@ -1285,7 +1306,7 @@ mod tests {
     }
 
     #[test]
-    fn test_0x30_jump_not_carry() {
+    fn test_0x30_jump_relative_not_carry() {
         let (mut cpu, mut mmu) = get_cpu_and_mmu();
         cpu.f = 0;
         cpu.pc = 0;
@@ -1378,9 +1399,9 @@ mod tests {
     }
 
     #[test]
-    fn test_0x28_jump_if_z() {
+    fn test_0x28_jump_relative_if_z() {
         let (mut cpu, mut mmu) = get_cpu_and_mmu();
-        cpu.f = 0b10000000; // zero, jump
+        cpu.f = 0b10000000; // zero, jump_relative
         cpu.pc = 0;
         mmu.memory[cpu.pc as usize] = 0x10;
         let cycles = cpu.execute(0x28, &mut mmu);
@@ -1440,7 +1461,7 @@ mod tests {
     }
 
     #[test]
-    fn test_0x20_jump_not_zero() {
+    fn test_0x20_jump_relative_not_zero() {
         let (mut cpu, mut mmu) = get_cpu_and_mmu();
         cpu.f = 0b00000000;
         cpu.pc = 0;
@@ -2096,23 +2117,47 @@ mod tests {
     }
 
     #[test]
-    fn test_jump() {
+    fn test_jump_abs() {
         let (mut cpu, mut mmu) = get_cpu_and_mmu();
 
         cpu.pc = 0;
-        let cycles = cpu.jump(false, &mut mmu);
-        assert_eq!(cpu.pc, 0);
+        let cycles = cpu.jump_abs(false, &mut mmu);
+        assert_eq!(cpu.pc, 2);
+        assert_eq!(cycles, 3);
+
+        cpu.pc = 0;
+        mmu.memory[cpu.pc as usize] = 0xCD;
+        mmu.memory[1 + cpu.pc as usize] = 0xAB;
+        let cycles = cpu.jump_abs(true, &mut mmu);
+        assert_eq!(cpu.pc, 0xABCD);
+        assert_eq!(cycles, 4);
+
+        cpu.pc = 0;
+        mmu.memory[cpu.pc as usize] = 0xFF;
+        mmu.memory[1 + cpu.pc as usize] = 0xFF;
+        let cycles = cpu.jump_abs(true, &mut mmu);
+        assert_eq!(cpu.pc, 0xFFFF);
+        assert_eq!(cycles, 4);
+    }
+
+    #[test]
+    fn test_jump_relative() {
+        let (mut cpu, mut mmu) = get_cpu_and_mmu();
+
+        cpu.pc = 0;
+        let cycles = cpu.jump_relative(false, &mut mmu);
+        assert_eq!(cpu.pc, 1);
         assert_eq!(cycles, 2);
 
         cpu.pc = 0;
         mmu.memory[cpu.pc as usize] = 0x10;
-        let cycles = cpu.jump(true, &mut mmu);
+        let cycles = cpu.jump_relative(true, &mut mmu);
         assert_eq!(cpu.pc, 0x10);
         assert_eq!(cycles, 3);
 
         cpu.pc = 0x10;
         mmu.memory[cpu.pc as usize] = (-0x10 as i8) as u8;
-        let cycles = cpu.jump(true, &mut mmu);
+        let cycles = cpu.jump_relative(true, &mut mmu);
         assert_eq!(cpu.pc, 0);
         assert_eq!(cycles, 3);
     }
