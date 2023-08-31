@@ -1,4 +1,4 @@
-use crate::mmu::{Memory, MMU};
+use crate::mmu::Memory;
 use crate::registers::Register::*;
 use crate::registers::{Register, Registers};
 
@@ -17,6 +17,23 @@ impl CPU {
             pc: 0x0100,
             ime: false,
         }
+    }
+
+    fn fetch(&mut self, mmu: &mut impl Memory) -> u8 {
+        let opcode = mmu.read_byte(self.pc);
+        self.pc += 1;
+        opcode
+    }
+
+    pub fn step(&mut self, mmu: &mut impl Memory) -> u8 {
+        if self.halted {
+            self.halted = false;
+            return 1
+        }
+        let opcode = self.fetch(mmu);
+        let cycles = self.execute(opcode, mmu);
+
+        cycles
     }
 
     fn u16_to_u8s(&self, value: u16) -> (u8, u8) {
@@ -270,6 +287,9 @@ impl CPU {
     }
 
     pub fn execute(&mut self, opcode: u8, mmu: &mut impl Memory) -> u8 {
+        if opcode != 0x00 {
+            println!("Executing opcode: {:02X} from {:04X}", opcode, self.pc);
+        }
         match opcode {
             0x00 => 1,
             0x01 => {
