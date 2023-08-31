@@ -11,6 +11,7 @@ pub struct CPU {
     l: u8,
     sp: u16,
     pc: u16,
+    ime: bool
 }
 
 const FLAG_MASK_ZERO: u8 = 0b10000000;
@@ -31,6 +32,7 @@ impl CPU {
             l: 0x4D,
             sp: 0xFFFE,
             pc: 0x0100,
+            ime: false
         }
     }
 
@@ -305,7 +307,7 @@ impl CPU {
                 self.set_flags(false, false, false, carry_bit > 0);
                 1
             }
-            0x10 => { todo!(); }
+            0x10 => { todo!(); } // STOP
             0x11 => {
                 self.e = mmu.read_byte(self.pc);
                 self.d = mmu.read_byte(self.pc + 1);
@@ -409,7 +411,7 @@ impl CPU {
                 2
             }
             0x27 => {
-                todo!();
+                todo!(); // DAA
             }
             0x28 => self.jump_relative(self.zero_flag(), mmu),
             0x29 => self.add_u16_to_hl(self.hl()),
@@ -1072,7 +1074,7 @@ impl CPU {
                 4
             }
             0xCA => { self.jump_abs(self.zero_flag(), mmu) }
-            0xCB => { todo!() }
+            0xCB => { todo!() } // Other opcode sheet
             0xCC => { self.call(self.zero_flag(), mmu) }
             0xCD => { self.call(true, mmu) }
             0xCE => {
@@ -1106,7 +1108,11 @@ impl CPU {
             }
             0xD7 => { self.restart(0x10, mmu) }
             0xD8 => self.ret(self.carry_flag(), mmu),
-            0xD9 => { todo!() }
+            0xD9 => {
+                self.ime = true;
+                self.ret(true, mmu);
+                4
+            }
             0xDA => { self.jump_abs(self.carry_flag(), mmu) }
             0xDB => { panic!("Unsupported OPCODE") }
             0xDC => {
@@ -1193,7 +1199,7 @@ impl CPU {
                 self.a = mmu.read_byte(address);
                 2
             }
-            0xF3 => { todo!() }
+            0xF3 => { self.ime = false; 1 }
             0xF4 => { panic!("Unsupported OPCODE") }
             0xF5 => {
                 self.push(self.af(), mmu);
@@ -1225,7 +1231,7 @@ impl CPU {
                 self.a = mmu.read_byte(address);
                 4
             }
-            0xFB => { todo!() }
+            0xFB => { self.ime = true; 1 }
             0xFC => { panic!("Unsupported OPCODE") }
             0xFD => { panic!("Unsupported OPCODE") }
             0xFE => {

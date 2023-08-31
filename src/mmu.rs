@@ -3,9 +3,17 @@ pub trait Memory {
     fn write_byte(&mut self, address: u16, value: u8);
 }
 
+const MASK_VBLANK: u8 = 0b00001;
+const MASK_LCD:    u8 = 0b00010;
+const MASK_TIMER:  u8 = 0b00100;
+const MASK_SERIAL: u8 = 0b01000;
+const MASK_JOYPAD: u8 = 0b10000;
+
 pub struct MMU {
     wram: [u8; 0x2000],
     vram: [u8; 0x2000],
+    ie_reg: u8,
+    if_reg: u8,
 }
 
 impl MMU {
@@ -13,6 +21,8 @@ impl MMU {
         MMU {
             wram: [0; 0x2000],
             vram: [0; 0x2000],
+            ie_reg: 0,
+            if_reg: 0,
         }
     }
 }
