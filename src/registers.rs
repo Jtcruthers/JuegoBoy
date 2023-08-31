@@ -28,7 +28,7 @@ pub enum Flag {
     Zero,
     Subtract,
     HalfCarry,
-    Carry
+    Carry,
 }
 
 pub struct Registers {
@@ -168,6 +168,5 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_call() {
-    }
+    fn test_call() {}
 }

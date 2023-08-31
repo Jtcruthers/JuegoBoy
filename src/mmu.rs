@@ -4,8 +4,8 @@ pub trait Memory {
 }
 
 const MASK_VBLANK: u8 = 0b00001;
-const MASK_LCD:    u8 = 0b00010;
-const MASK_TIMER:  u8 = 0b00100;
+const MASK_LCD: u8 = 0b00010;
+const MASK_TIMER: u8 = 0b00100;
 const MASK_SERIAL: u8 = 0b01000;
 const MASK_JOYPAD: u8 = 0b10000;
 
