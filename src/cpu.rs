@@ -7,6 +7,7 @@ pub struct CPU {
     sp: u16,
     pc: u16,
     ime: bool,
+    halted: bool
 }
 
 impl CPU {
@@ -16,6 +17,7 @@ impl CPU {
             sp: 0xFFFE,
             pc: 0x0100,
             ime: false,
+            halted: false,
         }
     }
 
@@ -201,7 +203,7 @@ impl CPU {
     }
 
     fn halt(&mut self) {
-        todo!();
+        self.halted = true;
     }
 
     fn add_a(&mut self, value: u8) {
@@ -364,8 +366,9 @@ impl CPU {
                 1
             }
             0x10 => {
-                todo!();
-            } // STOP
+                self.halt();
+                1
+            }
             0x11 => {
                 self.registers.e = mmu.read_byte(self.pc);
                 self.registers.d = mmu.read_byte(self.pc + 1);
