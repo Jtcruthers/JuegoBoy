@@ -1,14 +1,9 @@
 use crate::mmu::{Memory, MMU};
+use crate::registers::{Register, Registers};
+use crate::registers::Register::{*};
 
 pub struct CPU {
-    a: u8,
-    b: u8,
-    c: u8,
-    d: u8,
-    e: u8,
-    f: u8,
-    h: u8,
-    l: u8,
+    registers: Registers,
     sp: u16,
     pc: u16,
     ime: bool
@@ -22,59 +17,11 @@ const FLAG_MASK_CARRY: u8 = 0b00010000;
 impl CPU {
     pub fn new() -> CPU {
         CPU {
-            a: 0x01,
-            b: 0x00,
-            c: 0x13,
-            d: 0x00,
-            e: 0xD8,
-            f: 0xB0,
-            h: 0x01,
-            l: 0x4D,
+            registers: Registers::new(),
             sp: 0xFFFE,
             pc: 0x0100,
             ime: false
         }
-    }
-
-    fn af(&self) -> u16 {
-        ((self.a as u16) << 8) + self.f as u16
-    }
-
-    fn bc(&self) -> u16 {
-        ((self.b as u16) << 8) + self.c as u16
-    }
-
-    fn de(&self) -> u16 {
-        ((self.d as u16) << 8) + self.e as u16
-    }
-
-    fn hl(&self) -> u16 {
-        ((self.h as u16) << 8) + self.l as u16
-    }
-
-    fn zero_flag(&self) -> bool {
-        self.f & FLAG_MASK_ZERO > 0
-    }
-
-    fn subtract_flag(&self) -> bool {
-        self.f & FLAG_MASK_SUBTRACT > 0
-    }
-
-    fn half_carry_flag(&self) -> bool {
-        self.f & FLAG_MASK_HALF_CARRY > 0
-    }
-
-    fn carry_flag(&self) -> bool {
-        self.f & FLAG_MASK_CARRY > 0
-    }
-
-    fn set_flags(&mut self, z: bool, n: bool, h: bool, c: bool) {
-        let z_flag = if z { 0b1000 } else { 0 };
-        let n_flag = if n { 0b0100 } else { 0 };
-        let h_flag = if h { 0b0010 } else { 0 };
-        let c_flag = if c { 0b0001 } else { 0 };
-
-        self.f = (z_flag | n_flag | h_flag | c_flag) << 4;
     }
 
     fn u16_to_u8s(&self, value: u16) -> (u8, u8) {
@@ -97,8 +44,8 @@ impl CPU {
         let z = result == 0;
         let n = false;
         let h = result < value;
-        let c = self.carry_flag();
-        self.set_flags(z, n, h, c);
+        let c = self.registers.carry_flag();
+        self.registers.set_flags(z, n, h, c);
 
         result
     }
@@ -109,8 +56,8 @@ impl CPU {
         let z = result == 0;
         let n = true;
         let h = result > value;
-        let c = self.carry_flag();
-        self.set_flags(z, n, h, c);
+        let c = self.registers.carry_flag();
+        self.registers.set_flags(z, n, h, c);
 
         result
     }
@@ -151,13 +98,13 @@ impl CPU {
     }
 
     fn add_u16_to_hl(&mut self, value: u16) -> u8 {
-        let old_hl = self.hl();
-        let new_hl = self.hl().wrapping_add(value);
+        let old_hl = self.registers.hl();
+        let new_hl = self.registers.hl().wrapping_add(value);
         let (upper, lower) = self.u16_to_u8s(new_hl);
         let half_carry = (old_hl & 0x00FF) > (lower as u16);
-        self.set_flags(self.zero_flag(), false, half_carry, new_hl < old_hl);
-        self.h = upper;
-        self.l = lower;
+        self.registers.set_flags(self.registers.zero_flag(), false, half_carry, new_hl < old_hl);
+        self.registers.h = upper;
+        self.registers.l = lower;
         2
     }
 
@@ -166,39 +113,39 @@ impl CPU {
     }
 
     fn add_a(&mut self, value: u8) {
-        let old_a = self.a;
-        let new_a = self.a.wrapping_add(value);
+        let old_a = self.registers.a;
+        let new_a = self.registers.a.wrapping_add(value);
         let half_carry = (old_a & 0x0F) + (value & 0x0F) > 0x0F;
-        self.set_flags(new_a == 0, false, half_carry, new_a < old_a);
-        self.a = new_a;
+        self.registers.set_flags(new_a == 0, false, half_carry, new_a < old_a);
+        self.registers.a = new_a;
     }
 
     fn sub_a(&mut self, value: u8) {
-        let old_a = self.a;
-        let new_a = self.a.wrapping_sub(value);
+        let old_a = self.registers.a;
+        let new_a = self.registers.a.wrapping_sub(value);
         let half_carry = (old_a & 0x0F) < (value & 0x0F);
-        self.set_flags(new_a == 0, true, half_carry, new_a > old_a);
-        self.a = new_a;
+        self.registers.set_flags(new_a == 0, true, half_carry, new_a > old_a);
+        self.registers.a = new_a;
     }
 
     fn and_a(&mut self, value: u8) {
-        self.a &= value;
-        self.set_flags(self.a == 0, false, true, false);
+        self.registers.a &= value;
+        self.registers.set_flags(self.registers.a == 0, false, true, false);
     }
 
     fn xor_a(&mut self, value: u8) {
-        self.a ^= value;
-        self.set_flags(self.a == 0, false, false, false);
+        self.registers.a ^= value;
+        self.registers.set_flags(self.registers.a == 0, false, false, false);
     }
 
     fn or_a(&mut self, value: u8) {
-        self.a |= value;
-        self.set_flags(self.a == 0, false, false, false);
+        self.registers.a |= value;
+        self.registers.set_flags(self.registers.a == 0, false, false, false);
     }
 
     fn cp_a(&mut self, value: u8) {
-        let h = (self.a & 0x0F) < (value & 0x0F);
-        self.set_flags(self.a == value, true, h, self.a < value)
+        let h = (self.registers.a & 0x0F) < (value & 0x0F);
+        self.registers.set_flags(self.registers.a == value, true, h, self.registers.a < value)
     }
 
     fn ret(&mut self, condition: bool, mmu: &mut impl Memory) -> u8 {
@@ -215,12 +162,14 @@ impl CPU {
         4
     }
 
+    /** Get value from the stack and increment sp */
     fn pop(&mut self, mmu: &mut impl Memory) -> (u8, u8) {
         let value = self.read_u16(self.sp, mmu);
         self.sp += 2;
         self.u16_to_u8s(value)
     }
 
+    /** Put value onto the stack and decrement sp */
     fn push(&mut self, value: u16, mmu: &mut impl Memory) {
         let (upper, lower) = self.u16_to_u8s(value);
         self.sp -= 1;
@@ -229,42 +178,45 @@ impl CPU {
         mmu.write_byte(self.sp, lower);
     }
 
+    fn interrupt_service_routine(&mut self, mmu: &mut impl Memory) -> u8 {
+       self.push(self.pc, mmu); 
+       0
+    }
+
     pub fn execute(&mut self, opcode: u8, mmu: &mut impl Memory) -> u8 {
         match opcode {
             0x00 => 1,
             0x01 => {
-                self.c = mmu.read_byte(self.pc);
-                self.b = mmu.read_byte(self.pc + 1);
+                self.registers.c = mmu.read_byte(self.pc);
+                self.registers.b = mmu.read_byte(self.pc + 1);
                 self.pc += 2;
                 3
             }
             0x02 => {
-                mmu.write_byte(self.bc(), self.a);
+                mmu.write_byte(self.registers.bc(), self.registers.a);
                 2
             }
             0x03 => {
-                let (upper, lower) = self.u16_to_u8s(self.bc().wrapping_add(1));
-                self.b = upper;
-                self.c = lower;
+                let (upper, lower) = self.u16_to_u8s(self.registers.bc().wrapping_add(1));
+                self.registers.b = upper;
+                self.registers.c = lower;
                 2
             }
             0x04 => {
-                self.b = self.inc_u8_and_set_flags(self.b);
+                self.registers.b = self.inc_u8_and_set_flags(self.registers.b);
                 1
             }
             0x05 => {
-                self.b = self.dec_u8_and_set_flags(self.b);
+                self.registers.b = self.dec_u8_and_set_flags(self.registers.b);
                 1
             }
             0x06 => {
-                self.b = mmu.read_byte(self.pc);
+                self.registers.b = mmu.read_byte(self.pc);
                 self.pc += 1;
                 2
             }
             0x07 => {
-                let carry_bit = (self.a & 0b10000000) >> 7;
-                self.a = (self.a << 1) + carry_bit;
-                self.set_flags(false, false, false, carry_bit > 0);
+                self.rlc(A);
                 1
             }
             0x08 => {
@@ -277,186 +229,184 @@ impl CPU {
                 mmu.write_byte(addr, lower);
                 5
             }
-            0x09 => self.add_u16_to_hl(self.bc()),
+            0x09 => self.add_u16_to_hl(self.registers.bc()),
             0x0A => {
-                self.a = mmu.read_byte(self.bc());
+                self.registers.a = mmu.read_byte(self.registers.bc());
                 2
             }
             0x0B => {
-                let (upper, lower) = self.u16_to_u8s(self.bc().wrapping_sub(1));
-                self.b = upper;
-                self.c = lower;
+                let (upper, lower) = self.u16_to_u8s(self.registers.bc().wrapping_sub(1));
+                self.registers.b = upper;
+                self.registers.c = lower;
                 2
             }
             0x0C => {
-                self.c = self.inc_u8_and_set_flags(self.c);
+                self.registers.c = self.inc_u8_and_set_flags(self.registers.c);
                 1
             }
             0x0D => {
-                self.c = self.dec_u8_and_set_flags(self.c);
+                self.registers.c = self.dec_u8_and_set_flags(self.registers.c);
                 1
             }
             0x0E => {
-                self.c = mmu.read_byte(self.pc);
+                self.registers.c = mmu.read_byte(self.pc);
                 self.pc += 1;
                 2
             }
             0x0F => {
-                let carry_bit = self.a & 1;
-                self.a = (self.a >> 1) + (carry_bit << 7);
-                self.set_flags(false, false, false, carry_bit > 0);
+                self.rrc(A);
                 1
             }
             0x10 => { todo!(); } // STOP
             0x11 => {
-                self.e = mmu.read_byte(self.pc);
-                self.d = mmu.read_byte(self.pc + 1);
+                self.registers.e = mmu.read_byte(self.pc);
+                self.registers.d = mmu.read_byte(self.pc + 1);
                 self.pc += 2;
                 3
             }
             0x12 => {
-                mmu.write_byte(self.de(), self.a);
+                mmu.write_byte(self.registers.de(), self.registers.a);
                 2
             }
             0x13 => {
-                let (upper, lower) = self.u16_to_u8s(self.de().wrapping_add(1));
-                self.d = upper;
-                self.e = lower;
+                let (upper, lower) = self.u16_to_u8s(self.registers.de().wrapping_add(1));
+                self.registers.d = upper;
+                self.registers.e = lower;
                 2
             }
             0x14 => {
-                self.d = self.inc_u8_and_set_flags(self.d);
+                self.registers.d = self.inc_u8_and_set_flags(self.registers.d);
                 1
             }
             0x15 => {
-                self.d = self.dec_u8_and_set_flags(self.d);
+                self.registers.d = self.dec_u8_and_set_flags(self.registers.d);
                 1
             }
             0x16 => {
-                self.d = mmu.read_byte(self.pc);
+                self.registers.d = mmu.read_byte(self.pc);
                 self.pc += 1;
                 2
             }
             0x17 => {
-                let old_carry = if self.carry_flag() { 1 } else { 0 };
-                let new_carry = self.a & 0b10000000 > 0;
-                self.a = (self.a << 1) + old_carry;
-                self.set_flags(false, false, false, new_carry);
+                let old_carry = if self.registers.carry_flag() { 1 } else { 0 };
+                let new_carry = self.registers.a & 0b10000000 > 0;
+                self.registers.a = (self.registers.a << 1) + old_carry;
+                self.registers.set_flags(false, false, false, new_carry);
                 1
             }
             0x18 => self.jump_relative(true, mmu),
-            0x19 => self.add_u16_to_hl(self.de()),
+            0x19 => self.add_u16_to_hl(self.registers.de()),
             0x1A => {
-                self.a = mmu.read_byte(self.de());
+                self.registers.a = mmu.read_byte(self.registers.de());
                 2
             }
             0x1B => {
-                let (upper, lower) = self.u16_to_u8s(self.de().wrapping_sub(1));
-                self.d = upper;
-                self.e = lower;
+                let (upper, lower) = self.u16_to_u8s(self.registers.de().wrapping_sub(1));
+                self.registers.d = upper;
+                self.registers.e = lower;
                 2
             }
             0x1C => {
-                self.e = self.inc_u8_and_set_flags(self.e);
+                self.registers.e = self.inc_u8_and_set_flags(self.registers.e);
                 1
             }
             0x1D => {
-                self.e = self.dec_u8_and_set_flags(self.e);
+                self.registers.e = self.dec_u8_and_set_flags(self.registers.e);
                 1
             }
             0x1E => {
-                self.e = mmu.read_byte(self.pc);
+                self.registers.e = mmu.read_byte(self.pc);
                 self.pc += 1;
                 2
             }
             0x1F => {
-                let old_carry = if self.carry_flag() { 1 } else { 0 };
-                let new_carry = self.a & 1 > 0;
-                self.a = (self.a >> 1) + (old_carry << 7);
-                self.set_flags(false, false, false, new_carry);
+                let old_carry = if self.registers.carry_flag() { 1 } else { 0 };
+                let new_carry = self.registers.a & 1 > 0;
+                self.registers.a = (self.registers.a >> 1) + (old_carry << 7);
+                self.registers.set_flags(false, false, false, new_carry);
                 1
             }
-            0x20 => self.jump_relative(!self.zero_flag(), mmu),
+            0x20 => self.jump_relative(!self.registers.zero_flag(), mmu),
             0x21 => {
-                self.l = mmu.read_byte(self.pc);
+                self.registers.l = mmu.read_byte(self.pc);
                 self.pc += 1;
-                self.h = mmu.read_byte(self.pc);
+                self.registers.h = mmu.read_byte(self.pc);
                 self.pc += 1;
                 3
             }
             0x22 => {
-                mmu.write_byte(self.hl(), self.a);
-                let new_hl = self.hl().wrapping_add(1);
-                self.h = (new_hl >> 8) as u8;
-                self.l = (new_hl & 0x00FF) as u8;
+                mmu.write_byte(self.registers.hl(), self.registers.a);
+                let new_hl = self.registers.hl().wrapping_add(1);
+                self.registers.h = (new_hl >> 8) as u8;
+                self.registers.l = (new_hl & 0x00FF) as u8;
                 2
             }
             0x23 => {
-                let (upper, lower) = self.u16_to_u8s(self.hl().wrapping_add(1));
-                self.h = upper;
-                self.l = lower;
+                let (upper, lower) = self.u16_to_u8s(self.registers.hl().wrapping_add(1));
+                self.registers.h = upper;
+                self.registers.l = lower;
                 2
             }
             0x24 => {
-                self.h = self.inc_u8_and_set_flags(self.h);
+                self.registers.h = self.inc_u8_and_set_flags(self.registers.h);
                 1
             }
             0x25 => {
-                self.h = self.dec_u8_and_set_flags(self.h);
+                self.registers.h = self.dec_u8_and_set_flags(self.registers.h);
                 1
             }
             0x26 => {
-                self.h = mmu.read_byte(self.pc);
+                self.registers.h = mmu.read_byte(self.pc);
                 self.pc += 1;
                 2
             }
             0x27 => {
                 todo!(); // DAA
             }
-            0x28 => self.jump_relative(self.zero_flag(), mmu),
-            0x29 => self.add_u16_to_hl(self.hl()),
+            0x28 => self.jump_relative(self.registers.zero_flag(), mmu),
+            0x29 => self.add_u16_to_hl(self.registers.hl()),
             0x2A => {
-                self.a = mmu.read_byte(self.hl());
-                let new_hl = self.hl().wrapping_add(1);
-                self.h = (new_hl >> 8) as u8;
-                self.l = (new_hl & 0x00FF) as u8;
+                self.registers.a = mmu.read_byte(self.registers.hl());
+                let new_hl = self.registers.hl().wrapping_add(1);
+                self.registers.h = (new_hl >> 8) as u8;
+                self.registers.l = (new_hl & 0x00FF) as u8;
                 2
             }
             0x2B => {
-                let (upper, lower) = self.u16_to_u8s(self.hl().wrapping_sub(1));
-                self.h = upper;
-                self.l = lower;
+                let (upper, lower) = self.u16_to_u8s(self.registers.hl().wrapping_sub(1));
+                self.registers.h = upper;
+                self.registers.l = lower;
                 2
             }
             0x2C => {
-                self.l = self.inc_u8_and_set_flags(self.l);
+                self.registers.l = self.inc_u8_and_set_flags(self.registers.l);
                 1
             }
             0x2D => {
-                self.l = self.dec_u8_and_set_flags(self.l);
+                self.registers.l = self.dec_u8_and_set_flags(self.registers.l);
                 1
             }
             0x2E => {
-                self.l = mmu.read_byte(self.pc);
+                self.registers.l = mmu.read_byte(self.pc);
                 self.pc += 1;
                 2
             }
             0x2F => {
-                self.a = !self.a;
-                self.set_flags(self.zero_flag(), true, true, self.carry_flag());
+                self.registers.a = !self.registers.a;
+                self.registers.set_flags(self.registers.zero_flag(), true, true, self.registers.carry_flag());
                 1
             }
-            0x30 => self.jump_relative(!self.carry_flag(), mmu),
+            0x30 => self.jump_relative(!self.registers.carry_flag(), mmu),
             0x31 => {
                 self.sp = self.read_u16(self.pc, mmu);
                 self.pc += 2;
                 3
             }
             0x32 => {
-                mmu.write_byte(self.hl(), self.a);
-                let new_hl = self.hl().wrapping_sub(1);
-                self.h = (new_hl >> 8) as u8;
-                self.l = (new_hl & 0x00FF) as u8;
+                mmu.write_byte(self.registers.hl(), self.registers.a);
+                let new_hl = self.registers.hl().wrapping_sub(1);
+                self.registers.h = (new_hl >> 8) as u8;
+                self.registers.l = (new_hl & 0x00FF) as u8;
                 2
             }
             0x33 => {
@@ -464,35 +414,35 @@ impl CPU {
                 2
             }
             0x34 => {
-                let value = mmu.read_byte(self.hl());
+                let value = mmu.read_byte(self.registers.hl());
                 let new_value = self.inc_u8_and_set_flags(value);
-                mmu.write_byte(self.hl(), new_value);
+                mmu.write_byte(self.registers.hl(), new_value);
                 3
             }
             0x35 => {
-                let value = mmu.read_byte(self.hl());
+                let value = mmu.read_byte(self.registers.hl());
                 let new_value = self.dec_u8_and_set_flags(value);
-                mmu.write_byte(self.hl(), new_value);
+                mmu.write_byte(self.registers.hl(), new_value);
                 3
             }
             0x36 => {
                 let value = mmu.read_byte(self.pc);
-                mmu.write_byte(self.hl(), value);
+                mmu.write_byte(self.registers.hl(), value);
                 self.pc += 1;
                 2
             }
             0x37 => {
-                self.set_flags(self.zero_flag(), false, false, true);
+                self.registers.set_flags(self.registers.zero_flag(), false, false, true);
                 1
             }
-            0x38 => self.jump_relative(self.carry_flag(), mmu),
+            0x38 => self.jump_relative(self.registers.carry_flag(), mmu),
             0x39 => self.add_u16_to_hl(self.sp),
             0x3A => {
-                self.a = mmu.read_byte(self.hl());
-                let new_hl = self.hl().wrapping_sub(1);
+                self.registers.a = mmu.read_byte(self.registers.hl());
+                let new_hl = self.registers.hl().wrapping_sub(1);
                 let (upper, lower) = self.u16_to_u8s(new_hl);
-                self.h = upper;
-                self.l = lower;
+                self.registers.h = upper;
+                self.registers.l = lower;
                 2
             }
             0x3B => {
@@ -500,242 +450,242 @@ impl CPU {
                 2
             }
             0x3C => {
-                self.a = self.inc_u8_and_set_flags(self.a);
+                self.registers.a = self.inc_u8_and_set_flags(self.registers.a);
                 1
             }
             0x3D => {
-                self.a = self.dec_u8_and_set_flags(self.a);
+                self.registers.a = self.dec_u8_and_set_flags(self.registers.a);
                 1
             }
             0x3E => {
-                self.a = mmu.read_byte(self.pc);
+                self.registers.a = mmu.read_byte(self.pc);
                 self.pc += 1;
                 2
             }
             0x3F => {
-                self.set_flags(self.zero_flag(), false, false, !self.carry_flag());
+                self.registers.set_flags(self.registers.zero_flag(), false, false, !self.registers.carry_flag());
                 1
             }
             0x40 => {
-                self.b = self.b;
+                self.registers.b = self.registers.b;
                 1
             }
             0x41 => {
-                self.b = self.c;
+                self.registers.b = self.registers.c;
                 1
             }
             0x42 => {
-                self.b = self.d;
+                self.registers.b = self.registers.d;
                 1
             }
             0x43 => {
-                self.b = self.e;
+                self.registers.b = self.registers.e;
                 1
             }
             0x44 => {
-                self.b = self.h;
+                self.registers.b = self.registers.h;
                 1
             }
             0x45 => {
-                self.b = self.l;
+                self.registers.b = self.registers.l;
                 1
             }
             0x46 => {
-                self.b = mmu.read_byte(self.hl());
+                self.registers.b = mmu.read_byte(self.registers.hl());
                 2
             }
             0x47 => {
-                self.b = self.a;
+                self.registers.b = self.registers.a;
                 1
             }
 
             0x48 => {
-                self.c = self.b;
+                self.registers.c = self.registers.b;
                 1
             }
             0x49 => {
-                self.c = self.c;
+                self.registers.c = self.registers.c;
                 1
             }
             0x4A => {
-                self.c = self.d;
+                self.registers.c = self.registers.d;
                 1
             }
             0x4B => {
-                self.c = self.e;
+                self.registers.c = self.registers.e;
                 1
             }
             0x4C => {
-                self.c = self.h;
+                self.registers.c = self.registers.h;
                 1
             }
             0x4D => {
-                self.c = self.l;
+                self.registers.c = self.registers.l;
                 1
             }
             0x4E => {
-                self.c = mmu.read_byte(self.hl());
+                self.registers.c = mmu.read_byte(self.registers.hl());
                 2
             }
             0x4F => {
-                self.c = self.a;
+                self.registers.c = self.registers.a;
                 1
             }
 
             0x50 => {
-                self.d = self.b;
+                self.registers.d = self.registers.b;
                 1
             }
             0x51 => {
-                self.d = self.c;
+                self.registers.d = self.registers.c;
                 1
             }
             0x52 => {
-                self.d = self.d;
+                self.registers.d = self.registers.d;
                 1
             }
             0x53 => {
-                self.d = self.e;
+                self.registers.d = self.registers.e;
                 1
             }
             0x54 => {
-                self.d = self.h;
+                self.registers.d = self.registers.h;
                 1
             }
             0x55 => {
-                self.d = self.l;
+                self.registers.d = self.registers.l;
                 1
             }
             0x56 => {
-                self.d = mmu.read_byte(self.hl());
+                self.registers.d = mmu.read_byte(self.registers.hl());
                 2
             }
             0x57 => {
-                self.d = self.a;
+                self.registers.d = self.registers.a;
                 1
             }
 
             0x58 => {
-                self.e = self.b;
+                self.registers.e = self.registers.b;
                 1
             }
             0x59 => {
-                self.e = self.c;
+                self.registers.e = self.registers.c;
                 1
             }
             0x5A => {
-                self.e = self.d;
+                self.registers.e = self.registers.d;
                 1
             }
             0x5B => {
-                self.e = self.e;
+                self.registers.e = self.registers.e;
                 1
             }
             0x5C => {
-                self.e = self.h;
+                self.registers.e = self.registers.h;
                 1
             }
             0x5D => {
-                self.e = self.l;
+                self.registers.e = self.registers.l;
                 1
             }
             0x5E => {
-                self.e = mmu.read_byte(self.hl());
+                self.registers.e = mmu.read_byte(self.registers.hl());
                 2
             }
             0x5F => {
-                self.e = self.a;
+                self.registers.e = self.registers.a;
                 1
             }
 
             0x60 => {
-                self.h = self.b;
+                self.registers.h = self.registers.b;
                 1
             }
             0x61 => {
-                self.h = self.c;
+                self.registers.h = self.registers.c;
                 1
             }
             0x62 => {
-                self.h = self.d;
+                self.registers.h = self.registers.d;
                 1
             }
             0x63 => {
-                self.h = self.e;
+                self.registers.h = self.registers.e;
                 1
             }
             0x64 => {
-                self.h = self.h;
+                self.registers.h = self.registers.h;
                 1
             }
             0x65 => {
-                self.h = self.l;
+                self.registers.h = self.registers.l;
                 1
             }
             0x66 => {
-                self.h = mmu.read_byte(self.hl());
+                self.registers.h = mmu.read_byte(self.registers.hl());
                 2
             }
             0x67 => {
-                self.h = self.a;
+                self.registers.h = self.registers.a;
                 1
             }
 
             0x68 => {
-                self.l = self.b;
+                self.registers.l = self.registers.b;
                 1
             }
             0x69 => {
-                self.l = self.c;
+                self.registers.l = self.registers.c;
                 1
             }
             0x6A => {
-                self.l = self.d;
+                self.registers.l = self.registers.d;
                 1
             }
             0x6B => {
-                self.l = self.e;
+                self.registers.l = self.registers.e;
                 1
             }
             0x6C => {
-                self.l = self.h;
+                self.registers.l = self.registers.h;
                 1
             }
             0x6D => {
-                self.l = self.l;
+                self.registers.l = self.registers.l;
                 1
             }
             0x6E => {
-                self.l = mmu.read_byte(self.hl());
+                self.registers.l = mmu.read_byte(self.registers.hl());
                 2
             }
             0x6F => {
-                self.l = self.a;
+                self.registers.l = self.registers.a;
                 1
             }
 
             0x70 => {
-                mmu.write_byte(self.hl(), self.b);
+                mmu.write_byte(self.registers.hl(), self.registers.b);
                 2
             }
             0x71 => {
-                mmu.write_byte(self.hl(), self.c);
+                mmu.write_byte(self.registers.hl(), self.registers.c);
                 2
             }
             0x72 => {
-                mmu.write_byte(self.hl(), self.d);
+                mmu.write_byte(self.registers.hl(), self.registers.d);
                 2
             }
             0x73 => {
-                mmu.write_byte(self.hl(), self.e);
+                mmu.write_byte(self.registers.hl(), self.registers.e);
                 2
             }
             0x74 => {
-                mmu.write_byte(self.hl(), self.h);
+                mmu.write_byte(self.registers.hl(), self.registers.h);
                 2
             }
             0x75 => {
-                mmu.write_byte(self.hl(), self.l);
+                mmu.write_byte(self.registers.hl(), self.registers.l);
                 2
             }
             0x76 => {
@@ -743,322 +693,322 @@ impl CPU {
                 1
             }
             0x77 => {
-                mmu.write_byte(self.hl(), self.a);
+                mmu.write_byte(self.registers.hl(), self.registers.a);
                 2
             }
 
             0x78 => {
-                self.a = self.b;
+                self.registers.a = self.registers.b;
                 1
             }
             0x79 => {
-                self.a = self.c;
+                self.registers.a = self.registers.c;
                 1
             }
             0x7A => {
-                self.a = self.d;
+                self.registers.a = self.registers.d;
                 1
             }
             0x7B => {
-                self.a = self.e;
+                self.registers.a = self.registers.e;
                 1
             }
             0x7C => {
-                self.a = self.h;
+                self.registers.a = self.registers.h;
                 1
             }
             0x7D => {
-                self.a = self.l;
+                self.registers.a = self.registers.l;
                 1
             }
             0x7E => {
-                self.a = mmu.read_byte(self.hl());
+                self.registers.a = mmu.read_byte(self.registers.hl());
                 2
             }
             0x7F => {
-                self.a = self.a;
+                self.registers.a = self.registers.a;
                 1
             }
 
             0x80 => {
-                self.add_a(self.b);
+                self.add_a(self.registers.b);
                 1
             }
             0x81 => {
-                self.add_a(self.c);
+                self.add_a(self.registers.c);
                 1
             }
             0x82 => {
-                self.add_a(self.d);
+                self.add_a(self.registers.d);
                 1
             }
             0x83 => {
-                self.add_a(self.e);
+                self.add_a(self.registers.e);
                 1
             }
             0x84 => {
-                self.add_a(self.h);
+                self.add_a(self.registers.h);
                 1
             }
             0x85 => {
-                self.add_a(self.l);
+                self.add_a(self.registers.l);
                 1
             }
             0x86 => {
-                self.add_a(mmu.read_byte(self.hl()));
+                self.add_a(mmu.read_byte(self.registers.hl()));
                 2
             }
             0x87 => {
-                self.add_a(self.a);
+                self.add_a(self.registers.a);
                 1
             }
 
             0x88 => {
-                self.add_a(self.b + self.carry_flag() as u8);
+                self.add_a(self.registers.b + self.registers.carry_flag() as u8);
                 1
             }
             0x89 => {
-                self.add_a(self.c + self.carry_flag() as u8);
+                self.add_a(self.registers.c + self.registers.carry_flag() as u8);
                 1
             }
             0x8A => {
-                self.add_a(self.d + self.carry_flag() as u8);
+                self.add_a(self.registers.d + self.registers.carry_flag() as u8);
                 1
             }
             0x8B => {
-                self.add_a(self.e + self.carry_flag() as u8);
+                self.add_a(self.registers.e + self.registers.carry_flag() as u8);
                 1
             }
             0x8C => {
-                self.add_a(self.h + self.carry_flag() as u8);
+                self.add_a(self.registers.h + self.registers.carry_flag() as u8);
                 1
             }
             0x8D => {
-                self.add_a(self.l + self.carry_flag() as u8);
+                self.add_a(self.registers.l + self.registers.carry_flag() as u8);
                 1
             }
             0x8E => {
-                self.add_a(mmu.read_byte(self.hl()) + self.carry_flag() as u8);
+                self.add_a(mmu.read_byte(self.registers.hl()) + self.registers.carry_flag() as u8);
                 2
             }
             0x8F => {
-                self.add_a(self.a + self.carry_flag() as u8);
+                self.add_a(self.registers.a + self.registers.carry_flag() as u8);
                 1
             }
 
             0x90 => {
-                self.sub_a(self.b);
+                self.sub_a(self.registers.b);
                 1
             }
             0x91 => {
-                self.sub_a(self.c);
+                self.sub_a(self.registers.c);
                 1
             }
             0x92 => {
-                self.sub_a(self.d);
+                self.sub_a(self.registers.d);
                 1
             }
             0x93 => {
-                self.sub_a(self.e);
+                self.sub_a(self.registers.e);
                 1
             }
             0x94 => {
-                self.sub_a(self.h);
+                self.sub_a(self.registers.h);
                 1
             }
             0x95 => {
-                self.sub_a(self.l);
+                self.sub_a(self.registers.l);
                 1
             }
             0x96 => {
-                self.sub_a(mmu.read_byte(self.hl()));
+                self.sub_a(mmu.read_byte(self.registers.hl()));
                 2
             }
             0x97 => {
-                self.sub_a(self.a);
+                self.sub_a(self.registers.a);
                 1
             }
 
             0x98 => {
-                self.sub_a(self.b + self.carry_flag() as u8);
+                self.sub_a(self.registers.b + self.registers.carry_flag() as u8);
                 1
             }
             0x99 => {
-                self.sub_a(self.c + self.carry_flag() as u8);
+                self.sub_a(self.registers.c + self.registers.carry_flag() as u8);
                 1
             }
             0x9A => {
-                self.sub_a(self.d + self.carry_flag() as u8);
+                self.sub_a(self.registers.d + self.registers.carry_flag() as u8);
                 1
             }
             0x9B => {
-                self.sub_a(self.e + self.carry_flag() as u8);
+                self.sub_a(self.registers.e + self.registers.carry_flag() as u8);
                 1
             }
             0x9C => {
-                self.sub_a(self.h + self.carry_flag() as u8);
+                self.sub_a(self.registers.h + self.registers.carry_flag() as u8);
                 1
             }
             0x9D => {
-                self.sub_a(self.l + self.carry_flag() as u8);
+                self.sub_a(self.registers.l + self.registers.carry_flag() as u8);
                 1
             }
             0x9E => {
-                self.sub_a(mmu.read_byte(self.hl()) + self.carry_flag() as u8);
+                self.sub_a(mmu.read_byte(self.registers.hl()) + self.registers.carry_flag() as u8);
                 2
             }
             0x9F => {
-                self.sub_a(self.a + self.carry_flag() as u8);
+                self.sub_a(self.registers.a + self.registers.carry_flag() as u8);
                 1
             }
 
             0xA0 => {
-                self.and_a(self.b);
+                self.and_a(self.registers.b);
                 1
             }
             0xA1 => {
-                self.and_a(self.c);
+                self.and_a(self.registers.c);
                 1
             }
             0xA2 => {
-                self.and_a(self.d);
+                self.and_a(self.registers.d);
                 1
             }
             0xA3 => {
-                self.and_a(self.e);
+                self.and_a(self.registers.e);
                 1
             }
             0xA4 => {
-                self.and_a(self.h);
+                self.and_a(self.registers.h);
                 1
             }
             0xA5 => {
-                self.and_a(self.l);
+                self.and_a(self.registers.l);
                 1
             }
             0xA6 => {
-                self.and_a(mmu.read_byte(self.hl()));
+                self.and_a(mmu.read_byte(self.registers.hl()));
                 2
             }
             0xA7 => {
-                self.and_a(self.a);
+                self.and_a(self.registers.a);
                 1
             }
 
             0xA8 => {
-                self.xor_a(self.b);
+                self.xor_a(self.registers.b);
                 1
             }
             0xA9 => {
-                self.xor_a(self.c);
+                self.xor_a(self.registers.c);
                 1
             }
             0xAA => {
-                self.xor_a(self.d);
+                self.xor_a(self.registers.d);
                 1
             }
             0xAB => {
-                self.xor_a(self.e);
+                self.xor_a(self.registers.e);
                 1
             }
             0xAC => {
-                self.xor_a(self.h);
+                self.xor_a(self.registers.h);
                 1
             }
             0xAD => {
-                self.xor_a(self.l);
+                self.xor_a(self.registers.l);
                 1
             }
             0xAE => {
-                self.xor_a(mmu.read_byte(self.hl()));
+                self.xor_a(mmu.read_byte(self.registers.hl()));
                 2
             }
             0xAF => {
-                self.xor_a(self.a);
+                self.xor_a(self.registers.a);
                 1
             }
 
             0xB0 => {
-                self.or_a(self.b);
+                self.or_a(self.registers.b);
                 1
             }
             0xB1 => {
-                self.or_a(self.c);
+                self.or_a(self.registers.c);
                 1
             }
             0xB2 => {
-                self.or_a(self.d);
+                self.or_a(self.registers.d);
                 1
             }
             0xB3 => {
-                self.or_a(self.e);
+                self.or_a(self.registers.e);
                 1
             }
             0xB4 => {
-                self.or_a(self.h);
+                self.or_a(self.registers.h);
                 1
             }
             0xB5 => {
-                self.or_a(self.l);
+                self.or_a(self.registers.l);
                 1
             }
             0xB6 => {
-                self.or_a(mmu.read_byte(self.hl()));
+                self.or_a(mmu.read_byte(self.registers.hl()));
                 2
             }
             0xB7 => {
-                self.or_a(self.a);
+                self.or_a(self.registers.a);
                 1
             }
 
             0xB8 => {
-                self.cp_a(self.b);
+                self.cp_a(self.registers.b);
                 1
             }
             0xB9 => {
-                self.cp_a(self.c);
+                self.cp_a(self.registers.c);
                 1
             }
             0xBA => {
-                self.cp_a(self.d);
+                self.cp_a(self.registers.d);
                 1
             }
             0xBB => {
-                self.cp_a(self.e);
+                self.cp_a(self.registers.e);
                 1
             }
             0xBC => {
-                self.cp_a(self.h);
+                self.cp_a(self.registers.h);
                 1
             }
             0xBD => {
-                self.cp_a(self.l);
+                self.cp_a(self.registers.l);
                 1
             }
             0xBE => {
-                self.cp_a(mmu.read_byte(self.hl()));
+                self.cp_a(mmu.read_byte(self.registers.hl()));
                 2
             }
             0xBF => {
-                self.cp_a(self.a);
+                self.cp_a(self.registers.a);
                 1
             }
-            0xC0 => self.ret(!self.zero_flag(), mmu),
+            0xC0 => self.ret(!self.registers.zero_flag(), mmu),
             0xC1 => {
                 let (upper, lower) = self.pop(mmu);
-                self.b = upper;
-                self.c = lower;
+                self.registers.b = upper;
+                self.registers.c = lower;
                 3
             }
-            0xC2 => { self.jump_abs(!self.zero_flag(), mmu) }
+            0xC2 => { self.jump_abs(!self.registers.zero_flag(), mmu) }
             0xC3 => {
                 self.jump_abs(true, mmu)
             }
             0xC4 => {
-                self.call(!self.zero_flag(), mmu)
+                self.call(!self.registers.zero_flag(), mmu)
             }
             0xC5 => {
-                self.push(self.bc(), mmu);
+                self.push(self.registers.bc(), mmu);
                 4
             }
             0xC6 => {
@@ -1068,36 +1018,36 @@ impl CPU {
                 2
             }
             0xC7 => { self.restart(0, mmu) }
-            0xC8 => self.ret(self.zero_flag(), mmu),
+            0xC8 => self.ret(self.registers.zero_flag(), mmu),
             0xC9 => {
                 self.ret(true, mmu);
                 4
             }
-            0xCA => { self.jump_abs(self.zero_flag(), mmu) }
-            0xCB => { todo!() } // Other opcode sheet
-            0xCC => { self.call(self.zero_flag(), mmu) }
+            0xCA => { self.jump_abs(self.registers.zero_flag(), mmu) }
+            0xCB => { self.execute_cb_opcodes(mmu) } // Other opcode sheet
+            0xCC => { self.call(self.registers.zero_flag(), mmu) }
             0xCD => { self.call(true, mmu) }
             0xCE => {
-                let value = mmu.read_byte(self.pc) + self.carry_flag() as u8;
+                let value = mmu.read_byte(self.pc) + self.registers.carry_flag() as u8;
                 self.pc += 1;
                 self.add_a(value);
                 2
             }
             0xCF => { self.restart(0x08, mmu) }
-            0xD0 => self.ret(!self.carry_flag(), mmu),
+            0xD0 => self.ret(!self.registers.carry_flag(), mmu),
             0xD1 => {
                 let (upper, lower) = self.pop(mmu);
-                self.d = upper;
-                self.e = lower;
+                self.registers.d = upper;
+                self.registers.e = lower;
                 3
             }
-            0xD2 => { self.jump_abs(!self.carry_flag(), mmu) }
+            0xD2 => { self.jump_abs(!self.registers.carry_flag(), mmu) }
             0xD3 => { panic!("Unsupported OPCODE") }
             0xD4 => {
-                self.call(!self.carry_flag(), mmu)
+                self.call(!self.registers.carry_flag(), mmu)
             }
             0xD5 => {
-                self.push(self.de(), mmu);
+                self.push(self.registers.de(), mmu);
                 4
             }
             0xD6 => {
@@ -1107,20 +1057,20 @@ impl CPU {
                 2
             }
             0xD7 => { self.restart(0x10, mmu) }
-            0xD8 => self.ret(self.carry_flag(), mmu),
+            0xD8 => self.ret(self.registers.carry_flag(), mmu),
             0xD9 => {
                 self.ime = true;
                 self.ret(true, mmu);
                 4
             }
-            0xDA => { self.jump_abs(self.carry_flag(), mmu) }
+            0xDA => { self.jump_abs(self.registers.carry_flag(), mmu) }
             0xDB => { panic!("Unsupported OPCODE") }
             0xDC => {
-                self.call(self.carry_flag(), mmu)
+                self.call(self.registers.carry_flag(), mmu)
             }
             0xDD => { panic!("Unsupported OPCODE") }
             0xDE => {
-                let value = mmu.read_byte(self.pc) + self.carry_flag() as u8;
+                let value = mmu.read_byte(self.pc) + self.registers.carry_flag() as u8;
                 self.pc += 1;
                 self.sub_a(value);
                 2
@@ -1129,24 +1079,24 @@ impl CPU {
             0xE0 => {
                 let address = 0xFF00 + mmu.read_byte(self.pc) as u16;
                 self.pc += 1;
-                mmu.write_byte(address, self.a);
+                mmu.write_byte(address, self.registers.a);
                 3
             }
             0xE1 => {
                 let (upper, lower) = self.pop(mmu);
-                self.h = upper;
-                self.l = lower;
+                self.registers.h = upper;
+                self.registers.l = lower;
                 3
             }
             0xE2 => {
-                let address = 0xFF00 + self.c as u16;
-                mmu.write_byte(address, self.a);
+                let address = 0xFF00 + self.registers.c as u16;
+                mmu.write_byte(address, self.registers.a);
                 2
             }
             0xE3 => { panic!("Unsupported OPCODE") }
             0xE4 => { panic!("Unsupported OPCODE") }
             0xE5 => {
-                self.push(self.hl(), mmu);
+                self.push(self.registers.hl(), mmu);
                 4
             }
             0xE6 => {
@@ -1163,13 +1113,13 @@ impl CPU {
                 4
             }
             0xE9 => {
-                self.pc = self.read_u16(self.hl(), mmu);
+                self.pc = self.read_u16(self.registers.hl(), mmu);
                 4
             }
             0xEA => {
                 let address = self.read_u16(self.pc, mmu);
                 self.pc += 2;
-                mmu.write_byte(address, self.a);
+                mmu.write_byte(address, self.registers.a);
                 4
             }
             0xEB => { panic!("Unsupported OPCODE") }
@@ -1185,24 +1135,24 @@ impl CPU {
             0xF0 => {
                 let address = 0xFF00 + mmu.read_byte(self.pc) as u16;
                 self.pc += 1;
-                self.a = mmu.read_byte(address);
+                self.registers.a = mmu.read_byte(address);
                 3
             }
             0xF1 => {
                 let (upper, lower) = self.pop(mmu);
-                self.a = upper;
-                self.f = lower;
+                self.registers.a = upper;
+                self.registers.f = lower;
                 3
             }
             0xF2 => {
-                let address = 0xFF00 + self.c as u16;
-                self.a = mmu.read_byte(address);
+                let address = 0xFF00 + self.registers.c as u16;
+                self.registers.a = mmu.read_byte(address);
                 2
             }
             0xF3 => { self.ime = false; 1 }
             0xF4 => { panic!("Unsupported OPCODE") }
             0xF5 => {
-                self.push(self.af(), mmu);
+                self.push(self.registers.af(), mmu);
                 4
             }
             0xF6 => {
@@ -1217,18 +1167,18 @@ impl CPU {
                 self.pc += 1;
                 let value = (self.sp as i16 + offset) as u16;
                 let (upper, lower) = self.u16_to_u8s(value);
-                self.h = upper;
-                self.l = lower;
+                self.registers.h = upper;
+                self.registers.l = lower;
                 3
             }
             0xF9 => {
-                self.sp = self.hl();
+                self.sp = self.registers.hl();
                 2
             }
             0xFA => {
                 let address = self.read_u16(self.pc, mmu);
                 self.pc += 2;
-                self.a = mmu.read_byte(address);
+                self.registers.a = mmu.read_byte(address);
                 4
             }
             0xFB => { self.ime = true; 1 }
@@ -1242,6 +1192,12 @@ impl CPU {
             }
             0xFF => { self.restart(0x38, mmu) }
         }
+    }
+
+    fn execute_cb_opcodes(&mut self, mmu: &mut impl Memory) -> u8 {
+        let opcode = self.read_u16(self.pc, mmu);
+        self.pc += 2;
+        todo!("CB OPCODES")
     }
 }
 
@@ -1366,122 +1322,122 @@ mod tests {
     fn test_add_a() {
         let mut cpu = CPU::new();
 
-        cpu.a = 1;
+        cpu.registers.a = 1;
         cpu.add_a(2);
-        assert_eq!(cpu.a, 3);
-        assert_eq!(cpu.f, 0);
+        assert_eq!(cpu.registers.a, 3);
+        assert_eq!(cpu.registers.f, 0);
 
-        cpu.a = 0x0F;
+        cpu.registers.a = 0x0F;
         cpu.add_a(0x01);
-        assert_eq!(cpu.a, 0x10);
-        assert_eq!(cpu.f, 0b00100000);
+        assert_eq!(cpu.registers.a, 0x10);
+        assert_eq!(cpu.registers.f, 0b00100000);
 
-        cpu.a = 0xF0;
+        cpu.registers.a = 0xF0;
         cpu.add_a(0x10);
-        assert_eq!(cpu.a, 0x00);
-        assert_eq!(cpu.f, 0b10010000);
+        assert_eq!(cpu.registers.a, 0x00);
+        assert_eq!(cpu.registers.f, 0b10010000);
 
-        cpu.a = 0xF0;
+        cpu.registers.a = 0xF0;
         cpu.add_a(0x11);
-        assert_eq!(cpu.a, 0x01);
-        assert_eq!(cpu.f, 0b00010000);
+        assert_eq!(cpu.registers.a, 0x01);
+        assert_eq!(cpu.registers.f, 0b00010000);
     }
 
     #[test]
     fn test_sub_a() {
         let mut cpu = CPU::new();
 
-        cpu.a = 1;
+        cpu.registers.a = 1;
         cpu.sub_a(2);
-        assert_eq!(cpu.a, 0xFF);
-        assert_eq!(cpu.f, 0b01110000);
+        assert_eq!(cpu.registers.a, 0xFF);
+        assert_eq!(cpu.registers.f, 0b01110000);
 
-        cpu.a = 0x10;
+        cpu.registers.a = 0x10;
         cpu.sub_a(0x01);
-        assert_eq!(cpu.a, 0x0F);
-        assert_eq!(cpu.f, 0b01100000);
+        assert_eq!(cpu.registers.a, 0x0F);
+        assert_eq!(cpu.registers.f, 0b01100000);
 
-        cpu.a = 0x10;
+        cpu.registers.a = 0x10;
         cpu.sub_a(0x10);
-        assert_eq!(cpu.a, 0x00);
-        assert_eq!(cpu.f, 0b11000000);
+        assert_eq!(cpu.registers.a, 0x00);
+        assert_eq!(cpu.registers.f, 0b11000000);
 
-        cpu.a = 0xF0;
+        cpu.registers.a = 0xF0;
         cpu.sub_a(0x10);
-        assert_eq!(cpu.a, 0xE0);
-        assert_eq!(cpu.f, 0b01000000);
+        assert_eq!(cpu.registers.a, 0xE0);
+        assert_eq!(cpu.registers.f, 0b01000000);
     }
 
     #[test]
     fn test_xor_a() {
         let mut cpu = CPU::new();
 
-        cpu.a = 0b0111;
+        cpu.registers.a = 0b0111;
         cpu.xor_a(0b1101);
-        assert_eq!(cpu.a, 0b1010);
-        assert_eq!(cpu.f, 0);
+        assert_eq!(cpu.registers.a, 0b1010);
+        assert_eq!(cpu.registers.f, 0);
 
-        cpu.a = 0x10;
+        cpu.registers.a = 0x10;
         cpu.xor_a(0x10);
-        assert_eq!(cpu.a, 0);
-        assert_eq!(cpu.f, 0b10000000);
+        assert_eq!(cpu.registers.a, 0);
+        assert_eq!(cpu.registers.f, 0b10000000);
     }
 
     #[test]
     fn test_or_a() {
         let mut cpu = CPU::new();
 
-        cpu.a = 0b0111;
+        cpu.registers.a = 0b0111;
         cpu.or_a(0b1101);
-        assert_eq!(cpu.a, 0b1111);
-        assert_eq!(cpu.f, 0);
+        assert_eq!(cpu.registers.a, 0b1111);
+        assert_eq!(cpu.registers.f, 0);
 
-        cpu.a = 0x00;
+        cpu.registers.a = 0x00;
         cpu.or_a(0x00);
-        assert_eq!(cpu.a, 0);
-        assert_eq!(cpu.f, 0b10000000);
+        assert_eq!(cpu.registers.a, 0);
+        assert_eq!(cpu.registers.f, 0b10000000);
     }
 
     #[test]
     fn test_cp_a() {
         let mut cpu = CPU::new();
 
-        cpu.a = 5;
+        cpu.registers.a = 5;
         cpu.cp_a(5);
-        assert_eq!(cpu.f, 0b11000000);
+        assert_eq!(cpu.registers.f, 0b11000000);
 
-        cpu.a = 0x03;
+        cpu.registers.a = 0x03;
         cpu.cp_a(0x01);
-        assert_eq!(cpu.f, 0b01000000);
+        assert_eq!(cpu.registers.f, 0b01000000);
 
-        cpu.a = 0x10;
+        cpu.registers.a = 0x10;
         cpu.cp_a(0x03);
-        assert_eq!(cpu.f, 0b01100000);
+        assert_eq!(cpu.registers.f, 0b01100000);
 
-        cpu.a = 0x00;
+        cpu.registers.a = 0x00;
         cpu.cp_a(0x33);
-        assert_eq!(cpu.f, 0b01110000);
+        assert_eq!(cpu.registers.f, 0b01110000);
     }
 
     #[test]
     fn test_0x3a_load_hl_ptr_into_a_dec() {
         let (mut cpu, mut mmu) = get_cpu_and_mmu();
 
-        cpu.h = 0x12;
-        cpu.l = 0x34;
-        cpu.a = 0;
+        cpu.registers.h = 0x12;
+        cpu.registers.l = 0x34;
+        cpu.registers.a = 0;
         mmu.memory[0x1234] = 0xAA;
 
         cpu.execute(0x3A, &mut mmu);
 
-        assert_eq!(cpu.hl(), 0x1233);
-        assert_eq!(cpu.a, 0xAA);
+        assert_eq!(cpu.registers.hl(), 0x1233);
+        assert_eq!(cpu.registers.a, 0xAA);
     }
 
     #[test]
     fn test_0x38_jump_relative_carry() {
         let (mut cpu, mut mmu) = get_cpu_and_mmu();
-        cpu.f = 0 | FLAG_MASK_CARRY;
+        cpu.registers.f = 0 | FLAG_MASK_CARRY;
         cpu.pc = 0;
         mmu.memory[cpu.pc as usize] = 0x10;
 
@@ -1494,25 +1450,25 @@ mod tests {
     #[test]
     fn test_0x37_jump_relative_carry() {
         let (mut cpu, mut mmu) = get_cpu_and_mmu();
-        cpu.f = 0;
+        cpu.registers.f = 0;
 
         cpu.execute(0x37, &mut mmu);
 
-        assert_eq!(cpu.f, 0b00010000);
+        assert_eq!(cpu.registers.f, 0b00010000);
     }
 
     #[test]
     fn test_0x36_load_u8_into_hl_ptr() {
         let (mut cpu, mut mmu) = get_cpu_and_mmu();
 
-        cpu.h = 0x12;
-        cpu.l = 0x34;
+        cpu.registers.h = 0x12;
+        cpu.registers.l = 0x34;
         mmu.memory[cpu.pc as usize] = 0xAA;
-        mmu.memory[cpu.hl() as usize] = 0;
+        mmu.memory[cpu.registers.hl() as usize] = 0;
 
         cpu.execute(0x36, &mut mmu);
 
-        assert_eq!(mmu.memory[cpu.hl() as usize], 0xAA);
+        assert_eq!(mmu.memory[cpu.registers.hl() as usize], 0xAA);
     }
 
     #[test]
@@ -1533,7 +1489,7 @@ mod tests {
     #[test]
     fn test_0x30_jump_relative_not_carry() {
         let (mut cpu, mut mmu) = get_cpu_and_mmu();
-        cpu.f = 0;
+        cpu.registers.f = 0;
         cpu.pc = 0;
         mmu.memory[cpu.pc as usize] = 0x10;
 
@@ -1547,22 +1503,22 @@ mod tests {
     fn test_0x2f_compliment() {
         let (mut cpu, mut mmu) = get_cpu_and_mmu();
 
-        cpu.a = 0b10101010;
-        cpu.f = 0b10010000;
+        cpu.registers.a = 0b10101010;
+        cpu.registers.f = 0b10010000;
         cpu.execute(0x2F, &mut mmu);
-        assert_eq!(cpu.a, 0b01010101);
+        assert_eq!(cpu.registers.a, 0b01010101);
         assert_flags(&cpu, true, true, true, true);
 
-        cpu.a = 0b11110000;
-        cpu.f = 0b10010000;
+        cpu.registers.a = 0b11110000;
+        cpu.registers.f = 0b10010000;
         cpu.execute(0x2F, &mut mmu);
-        assert_eq!(cpu.a, 0b00001111);
+        assert_eq!(cpu.registers.a, 0b00001111);
         assert_flags(&cpu, true, true, true, true);
 
-        cpu.a = 0b00001111;
-        cpu.f = 0b00000000;
+        cpu.registers.a = 0b00001111;
+        cpu.registers.f = 0b00000000;
         cpu.execute(0x2F, &mut mmu);
-        assert_eq!(cpu.a, 0b11110000);
+        assert_eq!(cpu.registers.a, 0b11110000);
         assert_flags(&cpu, false, true, true, false);
     }
 
@@ -1570,15 +1526,15 @@ mod tests {
     fn test_0x2a_load_hl_ptr_into_a() {
         let (mut cpu, mut mmu) = get_cpu_and_mmu();
 
-        cpu.h = 0x12;
-        cpu.l = 0x34;
-        cpu.a = 0;
+        cpu.registers.h = 0x12;
+        cpu.registers.l = 0x34;
+        cpu.registers.a = 0;
         mmu.memory[0x1234] = 0xAA;
 
         cpu.execute(0x2A, &mut mmu);
 
-        assert_eq!(cpu.hl(), 0x1235);
-        assert_eq!(cpu.a, 0xAA);
+        assert_eq!(cpu.registers.hl(), 0x1235);
+        assert_eq!(cpu.registers.a, 0xAA);
     }
 
     #[test]
@@ -1586,47 +1542,47 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.h = 0x12;
-        cpu.l = 0x34;
-        cpu.f = 0b11000000;
+        cpu.registers.h = 0x12;
+        cpu.registers.l = 0x34;
+        cpu.registers.f = 0b11000000;
 
         cpu.execute(0x29, &mut mmu);
 
-        assert_eq!(cpu.hl(), 0x2468);
+        assert_eq!(cpu.registers.hl(), 0x2468);
         assert_flags(&cpu, true, false, false, false);
 
-        cpu.h = 0x00;
-        cpu.l = 0xFF;
-        cpu.f = 0b11000000;
+        cpu.registers.h = 0x00;
+        cpu.registers.l = 0xFF;
+        cpu.registers.f = 0b11000000;
 
         cpu.execute(0x29, &mut mmu);
 
-        assert_eq!(cpu.hl(), 0x01FE);
+        assert_eq!(cpu.registers.hl(), 0x01FE);
         assert_flags(&cpu, true, false, true, false);
 
-        cpu.h = 0xFF;
-        cpu.l = 0xFF;
-        cpu.f = 0b01000000;
+        cpu.registers.h = 0xFF;
+        cpu.registers.l = 0xFF;
+        cpu.registers.f = 0b01000000;
 
         cpu.execute(0x29, &mut mmu);
 
-        assert_eq!(cpu.hl(), 0xFFFE);
+        assert_eq!(cpu.registers.hl(), 0xFFFE);
         assert_flags(&cpu, false, false, true, true);
 
-        cpu.h = 0xFF;
-        cpu.l = 0x00;
-        cpu.f = 0b11000000;
+        cpu.registers.h = 0xFF;
+        cpu.registers.l = 0x00;
+        cpu.registers.f = 0b11000000;
 
         cpu.execute(0x29, &mut mmu);
 
-        assert_eq!(cpu.hl(), 0xFE00);
+        assert_eq!(cpu.registers.hl(), 0xFE00);
         assert_flags(&cpu, true, false, false, true);
     }
 
     #[test]
     fn test_0x28_jump_relative_if_z() {
         let (mut cpu, mut mmu) = get_cpu_and_mmu();
-        cpu.f = 0b10000000; // zero, jump_relative
+        cpu.registers.f = 0b10000000; // zero, jump_relative
         cpu.pc = 0;
         mmu.memory[cpu.pc as usize] = 0x10;
         let cycles = cpu.execute(0x28, &mut mmu);
@@ -1643,29 +1599,29 @@ mod tests {
     fn test_0x23_inc_hl() {
         let (mut cpu, mut mmu) = get_cpu_and_mmu();
 
-        cpu.h = 0x12;
-        cpu.l = 0x34;
+        cpu.registers.h = 0x12;
+        cpu.registers.l = 0x34;
         cpu.execute(0x23, &mut mmu);
-        assert_eq!(cpu.hl(), 0x1235);
+        assert_eq!(cpu.registers.hl(), 0x1235);
 
-        cpu.h = 0xFF;
-        cpu.l = 0xFF;
+        cpu.registers.h = 0xFF;
+        cpu.registers.l = 0xFF;
         cpu.execute(0x23, &mut mmu);
-        assert_eq!(cpu.hl(), 0x0);
+        assert_eq!(cpu.registers.hl(), 0x0);
     }
 
     #[test]
     fn test_0x22_load_a_into_hl_ptr() {
         let (mut cpu, mut mmu) = get_cpu_and_mmu();
 
-        cpu.h = 0x12;
-        cpu.l = 0x34;
-        cpu.a = 0xAA;
+        cpu.registers.h = 0x12;
+        cpu.registers.l = 0x34;
+        cpu.registers.a = 0xAA;
         mmu.memory[0x1234] = 0x00;
 
         cpu.execute(0x22, &mut mmu);
 
-        assert_eq!(cpu.hl(), 0x1235);
+        assert_eq!(cpu.registers.hl(), 0x1235);
         assert_eq!(mmu.memory[0x1234], 0xAA);
     }
 
@@ -1673,22 +1629,22 @@ mod tests {
     fn test_0x21_load_u16_into_hl() {
         let (mut cpu, mut mmu) = get_cpu_and_mmu();
 
-        cpu.h = 0x00;
-        cpu.l = 0x00;
+        cpu.registers.h = 0x00;
+        cpu.registers.l = 0x00;
         cpu.pc = 0x0000;
         mmu.memory[cpu.pc as usize] = 0x34; // little endian
         mmu.memory[cpu.pc as usize + 1] = 0x12;
 
         cpu.execute(0x21, &mut mmu);
 
-        assert_eq!(cpu.hl(), 0x1234);
+        assert_eq!(cpu.registers.hl(), 0x1234);
         assert_eq!(cpu.pc, 0x0002);
     }
 
     #[test]
     fn test_0x20_jump_relative_not_zero() {
         let (mut cpu, mut mmu) = get_cpu_and_mmu();
-        cpu.f = 0b00000000;
+        cpu.registers.f = 0b00000000;
         cpu.pc = 0;
         mmu.memory[cpu.pc as usize] = 0x10;
 
@@ -1703,14 +1659,14 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.a = 0x00;
-        cpu.d = 0x56;
-        cpu.e = 0x78;
+        cpu.registers.a = 0x00;
+        cpu.registers.d = 0x56;
+        cpu.registers.e = 0x78;
         mmu.memory[0x5678] = 0x12;
 
         cpu.execute(0x1A, &mut mmu);
 
-        assert_eq!(cpu.a, 0x12);
+        assert_eq!(cpu.registers.a, 0x12);
     }
 
     #[test]
@@ -1718,28 +1674,28 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.f = 0b00000000;
-        cpu.a = 0b00000001;
+        cpu.registers.f = 0b00000000;
+        cpu.registers.a = 0b00000001;
 
         cpu.execute(0x1F, &mut mmu);
 
-        assert_eq!(cpu.a, 0b00000000);
+        assert_eq!(cpu.registers.a, 0b00000000);
         assert_flags(&cpu, false, false, false, true);
 
-        cpu.f = 0b00010000;
-        cpu.a = 0b11111110;
+        cpu.registers.f = 0b00010000;
+        cpu.registers.a = 0b11111110;
 
         cpu.execute(0x1F, &mut mmu);
 
-        assert_eq!(cpu.a, 0b11111111);
+        assert_eq!(cpu.registers.a, 0b11111111);
         assert_flags(&cpu, false, false, false, false);
 
-        cpu.f = 0b00000000;
-        cpu.a = 0b11111110;
+        cpu.registers.f = 0b00000000;
+        cpu.registers.a = 0b11111110;
 
         cpu.execute(0x1F, &mut mmu);
 
-        assert_eq!(cpu.a, 0b01111111);
+        assert_eq!(cpu.registers.a, 0b01111111);
         assert_flags(&cpu, false, false, false, false);
     }
 
@@ -1748,48 +1704,48 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.h = 0x12;
-        cpu.l = 0x34;
-        cpu.d = 0x56;
-        cpu.e = 0x78;
-        cpu.f = 0b11000000;
+        cpu.registers.h = 0x12;
+        cpu.registers.l = 0x34;
+        cpu.registers.d = 0x56;
+        cpu.registers.e = 0x78;
+        cpu.registers.f = 0b11000000;
 
         cpu.execute(0x19, &mut mmu);
 
-        assert_eq!(cpu.hl(), 0x1234 + 0x5678);
+        assert_eq!(cpu.registers.hl(), 0x1234 + 0x5678);
         assert_flags(&cpu, true, false, false, false);
 
-        cpu.h = 0x00;
-        cpu.l = 0xFF;
-        cpu.d = 0x12;
-        cpu.e = 0x01;
-        cpu.f = 0b11000000;
+        cpu.registers.h = 0x00;
+        cpu.registers.l = 0xFF;
+        cpu.registers.d = 0x12;
+        cpu.registers.e = 0x01;
+        cpu.registers.f = 0b11000000;
 
         cpu.execute(0x19, &mut mmu);
 
-        assert_eq!(cpu.hl(), 0x1300);
+        assert_eq!(cpu.registers.hl(), 0x1300);
         assert_flags(&cpu, true, false, true, false);
 
-        cpu.h = 0xFF;
-        cpu.l = 0xFF;
-        cpu.d = 0x00;
-        cpu.e = 0x01;
-        cpu.f = 0b11000000;
+        cpu.registers.h = 0xFF;
+        cpu.registers.l = 0xFF;
+        cpu.registers.d = 0x00;
+        cpu.registers.e = 0x01;
+        cpu.registers.f = 0b11000000;
 
         cpu.execute(0x19, &mut mmu);
 
-        assert_eq!(cpu.hl(), 0x0);
+        assert_eq!(cpu.registers.hl(), 0x0);
         assert_flags(&cpu, true, false, true, true);
 
-        cpu.h = 0xFF;
-        cpu.l = 0x00;
-        cpu.d = 0x01;
-        cpu.e = 0x00;
-        cpu.f = 0b11000000;
+        cpu.registers.h = 0xFF;
+        cpu.registers.l = 0x00;
+        cpu.registers.d = 0x01;
+        cpu.registers.e = 0x00;
+        cpu.registers.f = 0b11000000;
 
         cpu.execute(0x19, &mut mmu);
 
-        assert_eq!(cpu.hl(), 0x0);
+        assert_eq!(cpu.registers.hl(), 0x0);
         assert_flags(&cpu, true, false, false, true);
     }
 
@@ -1811,32 +1767,32 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.f = 0b00000000;
-        cpu.a = 0b10000000;
+        cpu.registers.f = 0b00000000;
+        cpu.registers.a = 0b10000000;
 
         cpu.execute(0x17, &mut mmu);
 
-        assert_eq!(cpu.a, 0b00000000);
+        assert_eq!(cpu.registers.a, 0b00000000);
         assert_flags(&cpu, false, false, false, true);
 
-        cpu.f = 0b00010000;
-        cpu.a = 0b01111111;
+        cpu.registers.f = 0b00010000;
+        cpu.registers.a = 0b01111111;
 
         cpu.execute(0x17, &mut mmu);
 
-        assert_eq!(cpu.a, 0b11111111);
+        assert_eq!(cpu.registers.a, 0b11111111);
         assert_flags(&cpu, false, false, false, false);
 
-        cpu.f = 0b00000000;
-        cpu.a = 0b01111111;
+        cpu.registers.f = 0b00000000;
+        cpu.registers.a = 0b01111111;
 
         cpu.execute(0x17, &mut mmu);
 
-        assert_eq!(cpu.a, 0b11111110);
-        assert_eq!(cpu.zero_flag(), false); // Reset
-        assert_eq!(cpu.subtract_flag(), false); // Reset
-        assert_eq!(cpu.half_carry_flag(), false); // Reset
-        assert_eq!(cpu.carry_flag(), false);
+        assert_eq!(cpu.registers.a, 0b11111110);
+        assert_eq!(cpu.registers.zero_flag(), false); // Reset
+        assert_eq!(cpu.registers.subtract_flag(), false); // Reset
+        assert_eq!(cpu.registers.half_carry_flag(), false); // Reset
+        assert_eq!(cpu.registers.carry_flag(), false);
     }
 
     #[test]
@@ -1844,40 +1800,40 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.d = 0xFF;
+        cpu.registers.d = 0xFF;
         cpu.pc = 0x0100;
         mmu.write_byte(0x0100, 0xAB);
 
         cpu.execute(0x16, &mut mmu);
 
-        assert_eq!(cpu.d, 0xAB);
+        assert_eq!(cpu.registers.d, 0xAB);
         assert_eq!(cpu.pc, 0x0101);
 
-        cpu.e = 0xFF;
+        cpu.registers.e = 0xFF;
         cpu.pc = 0x0100;
         mmu.write_byte(0x0100, 0xAB);
 
         cpu.execute(0x1E, &mut mmu);
 
-        assert_eq!(cpu.e, 0xAB);
+        assert_eq!(cpu.registers.e, 0xAB);
         assert_eq!(cpu.pc, 0x0101);
 
-        cpu.l = 0xFF;
+        cpu.registers.l = 0xFF;
         cpu.pc = 0x0100;
         mmu.write_byte(0x0100, 0xAB);
 
         cpu.execute(0x2E, &mut mmu);
 
-        assert_eq!(cpu.l, 0xAB);
+        assert_eq!(cpu.registers.l, 0xAB);
         assert_eq!(cpu.pc, 0x0101);
 
-        cpu.h = 0xFF;
+        cpu.registers.h = 0xFF;
         cpu.pc = 0x0100;
         mmu.write_byte(0x0100, 0xAB);
 
         cpu.execute(0x26, &mut mmu);
 
-        assert_eq!(cpu.l, 0xAB);
+        assert_eq!(cpu.registers.l, 0xAB);
         assert_eq!(cpu.pc, 0x0101);
     }
 
@@ -1886,37 +1842,37 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.d = 0x12;
+        cpu.registers.d = 0x12;
         cpu.execute(0x15, &mut mmu);
-        assert_eq!(cpu.d, 0x11);
+        assert_eq!(cpu.registers.d, 0x11);
 
-        cpu.d = 0x00;
+        cpu.registers.d = 0x00;
         cpu.execute(0x15, &mut mmu);
-        assert_eq!(cpu.d, 0xFF);
+        assert_eq!(cpu.registers.d, 0xFF);
 
-        cpu.e = 0x12;
+        cpu.registers.e = 0x12;
         cpu.execute(0x1D, &mut mmu);
-        assert_eq!(cpu.e, 0x11);
+        assert_eq!(cpu.registers.e, 0x11);
 
-        cpu.e = 0x00;
+        cpu.registers.e = 0x00;
         cpu.execute(0x1D, &mut mmu);
-        assert_eq!(cpu.e, 0xFF);
+        assert_eq!(cpu.registers.e, 0xFF);
 
-        cpu.h = 0x12;
+        cpu.registers.h = 0x12;
         cpu.execute(0x25, &mut mmu);
-        assert_eq!(cpu.h, 0x11);
+        assert_eq!(cpu.registers.h, 0x11);
 
-        cpu.h = 0x00;
+        cpu.registers.h = 0x00;
         cpu.execute(0x25, &mut mmu);
-        assert_eq!(cpu.h, 0xFF);
+        assert_eq!(cpu.registers.h, 0xFF);
 
-        cpu.l = 0x12;
+        cpu.registers.l = 0x12;
         cpu.execute(0x2D, &mut mmu);
-        assert_eq!(cpu.l, 0x11);
+        assert_eq!(cpu.registers.l, 0x11);
 
-        cpu.l = 0x00;
+        cpu.registers.l = 0x00;
         cpu.execute(0x2D, &mut mmu);
-        assert_eq!(cpu.l, 0xFF);
+        assert_eq!(cpu.registers.l, 0xFF);
     }
 
     #[test]
@@ -1924,37 +1880,37 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.d = 0x12;
+        cpu.registers.d = 0x12;
         cpu.execute(0x14, &mut mmu);
-        assert_eq!(cpu.d, 0x13);
+        assert_eq!(cpu.registers.d, 0x13);
 
-        cpu.d = 0xFF;
+        cpu.registers.d = 0xFF;
         cpu.execute(0x14, &mut mmu);
-        assert_eq!(cpu.d, 0x00);
+        assert_eq!(cpu.registers.d, 0x00);
 
-        cpu.e = 0x12;
+        cpu.registers.e = 0x12;
         cpu.execute(0x1C, &mut mmu);
-        assert_eq!(cpu.e, 0x13);
+        assert_eq!(cpu.registers.e, 0x13);
 
-        cpu.e = 0xFF;
+        cpu.registers.e = 0xFF;
         cpu.execute(0x1C, &mut mmu);
-        assert_eq!(cpu.e, 0x00);
+        assert_eq!(cpu.registers.e, 0x00);
 
-        cpu.h = 0x12;
+        cpu.registers.h = 0x12;
         cpu.execute(0x24, &mut mmu);
-        assert_eq!(cpu.h, 0x13);
+        assert_eq!(cpu.registers.h, 0x13);
 
-        cpu.h = 0xFF;
+        cpu.registers.h = 0xFF;
         cpu.execute(0x24, &mut mmu);
-        assert_eq!(cpu.h, 0x00);
+        assert_eq!(cpu.registers.h, 0x00);
 
-        cpu.l = 0x12;
+        cpu.registers.l = 0x12;
         cpu.execute(0x2C, &mut mmu);
-        assert_eq!(cpu.l, 0x13);
+        assert_eq!(cpu.registers.l, 0x13);
 
-        cpu.l = 0xFF;
+        cpu.registers.l = 0xFF;
         cpu.execute(0x2C, &mut mmu);
-        assert_eq!(cpu.l, 0x00);
+        assert_eq!(cpu.registers.l, 0x00);
     }
 
     #[test]
@@ -1962,25 +1918,25 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.d = 0x12;
-        cpu.e = 0x34;
+        cpu.registers.d = 0x12;
+        cpu.registers.e = 0x34;
         cpu.execute(0x1B, &mut mmu);
-        assert_eq!(cpu.de(), 0x1233);
+        assert_eq!(cpu.registers.de(), 0x1233);
 
-        cpu.d = 0x00;
-        cpu.e = 0x00;
+        cpu.registers.d = 0x00;
+        cpu.registers.e = 0x00;
         cpu.execute(0x1B, &mut mmu);
-        assert_eq!(cpu.de(), 0xFFFF);
+        assert_eq!(cpu.registers.de(), 0xFFFF);
 
-        cpu.h = 0x12;
-        cpu.l = 0x34;
+        cpu.registers.h = 0x12;
+        cpu.registers.l = 0x34;
         cpu.execute(0x2B, &mut mmu);
-        assert_eq!(cpu.hl(), 0x1233);
+        assert_eq!(cpu.registers.hl(), 0x1233);
 
-        cpu.h = 0x00;
-        cpu.l = 0x00;
+        cpu.registers.h = 0x00;
+        cpu.registers.l = 0x00;
         cpu.execute(0x2B, &mut mmu);
-        assert_eq!(cpu.hl(), 0xFFFF);
+        assert_eq!(cpu.registers.hl(), 0xFFFF);
 
         cpu.sp = 0x1234;
         cpu.execute(0x3B, &mut mmu);
@@ -1996,25 +1952,25 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.d = 0x12;
-        cpu.e = 0x34;
+        cpu.registers.d = 0x12;
+        cpu.registers.e = 0x34;
         cpu.execute(0x13, &mut mmu);
-        assert_eq!(cpu.de(), 0x1235);
+        assert_eq!(cpu.registers.de(), 0x1235);
 
-        cpu.d = 0xFF;
-        cpu.e = 0xFF;
+        cpu.registers.d = 0xFF;
+        cpu.registers.e = 0xFF;
         cpu.execute(0x13, &mut mmu);
-        assert_eq!(cpu.de(), 0);
+        assert_eq!(cpu.registers.de(), 0);
 
-        cpu.h = 0x12;
-        cpu.l = 0x34;
+        cpu.registers.h = 0x12;
+        cpu.registers.l = 0x34;
         cpu.execute(0x23, &mut mmu);
-        assert_eq!(cpu.hl(), 0x1235);
+        assert_eq!(cpu.registers.hl(), 0x1235);
 
-        cpu.h = 0xFF;
-        cpu.l = 0xFF;
+        cpu.registers.h = 0xFF;
+        cpu.registers.l = 0xFF;
         cpu.execute(0x23, &mut mmu);
-        assert_eq!(cpu.hl(), 0);
+        assert_eq!(cpu.registers.hl(), 0);
 
         cpu.sp = 0x1234;
         cpu.execute(0x33, &mut mmu);
@@ -2030,15 +1986,15 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.a = 0xAB;
-        cpu.d = 0x12;
-        cpu.e = 0x34;
+        cpu.registers.a = 0xAB;
+        cpu.registers.d = 0x12;
+        cpu.registers.e = 0x34;
         mmu.memory[0x1234] = 0x00;
 
         cpu.execute(0x12, &mut mmu);
 
         assert_eq!(mmu.memory[0x1234], 0xAB);
-        assert_eq!(cpu.de(), 0x1234);
+        assert_eq!(cpu.registers.de(), 0x1234);
     }
 
     #[test]
@@ -2052,7 +2008,7 @@ mod tests {
 
         cpu.execute(0x11, &mut mmu);
 
-        assert_eq!(cpu.de(), 0x1234);
+        assert_eq!(cpu.registers.de(), 0x1234);
         assert_eq!(cpu.pc, 0x0007);
     }
 
@@ -2061,21 +2017,21 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.a = 0b11111110;
+        cpu.registers.a = 0b11111110;
 
         cpu.execute(0x0F, &mut mmu);
 
-        assert_eq!(cpu.a, 0b01111111);
-        assert_eq!(cpu.zero_flag(), false);
-        assert_eq!(cpu.carry_flag(), false);
+        assert_eq!(cpu.registers.a, 0b01111111);
+        assert_eq!(cpu.registers.zero_flag(), false);
+        assert_eq!(cpu.registers.carry_flag(), false);
 
-        cpu.a = 0b00000001;
+        cpu.registers.a = 0b00000001;
 
         cpu.execute(0x0F, &mut mmu);
 
-        assert_eq!(cpu.a, 0b10000000);
-        assert_eq!(cpu.zero_flag(), false);
-        assert_eq!(cpu.carry_flag(), true);
+        assert_eq!(cpu.registers.a, 0b10000000);
+        assert_eq!(cpu.registers.zero_flag(), false);
+        assert_eq!(cpu.registers.carry_flag(), true);
     }
 
     #[test]
@@ -2083,13 +2039,13 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.c = 0x0;
+        cpu.registers.c = 0x0;
         cpu.pc = 0x1234;
         mmu.memory[0x1234] = 0xAB;
 
         cpu.execute(0x0E, &mut mmu);
 
-        assert_eq!(cpu.c, 0xAB);
+        assert_eq!(cpu.registers.c, 0xAB);
         assert_eq!(cpu.pc, 0x1235);
     }
 
@@ -2098,26 +2054,26 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.c = 0x01;
-        cpu.f = 0b00110000; // Set carry flag
+        cpu.registers.c = 0x01;
+        cpu.registers.f = 0b00110000; // Set carry flag
 
         cpu.execute(0x0D, &mut mmu);
 
-        assert_eq!(cpu.c, 0x00);
-        assert_eq!(cpu.zero_flag(), true);
-        assert_eq!(cpu.subtract_flag(), true);
-        assert_eq!(cpu.half_carry_flag(), false);
-        assert_eq!(cpu.carry_flag(), true); // Unmodified
+        assert_eq!(cpu.registers.c, 0x00);
+        assert_eq!(cpu.registers.zero_flag(), true);
+        assert_eq!(cpu.registers.subtract_flag(), true);
+        assert_eq!(cpu.registers.half_carry_flag(), false);
+        assert_eq!(cpu.registers.carry_flag(), true); // Unmodified
 
-        cpu.c = 0x00;
-        cpu.f = 0b00010000; // Set carry flag
+        cpu.registers.c = 0x00;
+        cpu.registers.f = 0b00010000; // Set carry flag
         cpu.execute(0x0D, &mut mmu);
 
-        assert_eq!(cpu.c, 0xFF);
-        assert_eq!(cpu.zero_flag(), false);
-        assert_eq!(cpu.subtract_flag(), true);
-        assert_eq!(cpu.half_carry_flag(), true);
-        assert_eq!(cpu.carry_flag(), true); // Unmodified
+        assert_eq!(cpu.registers.c, 0xFF);
+        assert_eq!(cpu.registers.zero_flag(), false);
+        assert_eq!(cpu.registers.subtract_flag(), true);
+        assert_eq!(cpu.registers.half_carry_flag(), true);
+        assert_eq!(cpu.registers.carry_flag(), true); // Unmodified
     }
 
     #[test]
@@ -2125,25 +2081,25 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.c = 0x12;
-        cpu.f = 0b11110000; // Set carry flag
+        cpu.registers.c = 0x12;
+        cpu.registers.f = 0b11110000; // Set carry flag
         cpu.execute(0x0C, &mut mmu);
 
-        assert_eq!(cpu.c, 0x13);
-        assert_eq!(cpu.zero_flag(), false);
-        assert_eq!(cpu.subtract_flag(), false); // Resets
-        assert_eq!(cpu.half_carry_flag(), false);
-        assert_eq!(cpu.carry_flag(), true); // Unmodified
+        assert_eq!(cpu.registers.c, 0x13);
+        assert_eq!(cpu.registers.zero_flag(), false);
+        assert_eq!(cpu.registers.subtract_flag(), false); // Resets
+        assert_eq!(cpu.registers.half_carry_flag(), false);
+        assert_eq!(cpu.registers.carry_flag(), true); // Unmodified
 
-        cpu.c = 0xFF;
-        cpu.f = 0b01010000; // Set carry flag
+        cpu.registers.c = 0xFF;
+        cpu.registers.f = 0b01010000; // Set carry flag
         cpu.execute(0x0C, &mut mmu);
 
-        assert_eq!(cpu.c, 0x00);
-        assert_eq!(cpu.zero_flag(), true);
-        assert_eq!(cpu.subtract_flag(), false); // Resets
-        assert_eq!(cpu.half_carry_flag(), true);
-        assert_eq!(cpu.carry_flag(), true); // Unmodified
+        assert_eq!(cpu.registers.c, 0x00);
+        assert_eq!(cpu.registers.zero_flag(), true);
+        assert_eq!(cpu.registers.subtract_flag(), false); // Resets
+        assert_eq!(cpu.registers.half_carry_flag(), true);
+        assert_eq!(cpu.registers.carry_flag(), true); // Unmodified
     }
 
     #[test]
@@ -2151,12 +2107,12 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.b = 0x12;
-        cpu.c = 0x34;
+        cpu.registers.b = 0x12;
+        cpu.registers.c = 0x34;
 
         cpu.execute(0x0B, &mut mmu);
 
-        assert_eq!(cpu.bc(), 0x1233);
+        assert_eq!(cpu.registers.bc(), 0x1233);
     }
 
     #[test]
@@ -2164,14 +2120,14 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.a = 0x00;
-        cpu.b = 0x56;
-        cpu.c = 0x78;
+        cpu.registers.a = 0x00;
+        cpu.registers.b = 0x56;
+        cpu.registers.c = 0x78;
         mmu.memory[0x5678] = 0x12;
 
         cpu.execute(0x0A, &mut mmu);
 
-        assert_eq!(cpu.a, 0x12);
+        assert_eq!(cpu.registers.a, 0x12);
     }
 
     #[test]
@@ -2179,19 +2135,19 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.h = 0x12;
-        cpu.l = 0x34;
-        cpu.b = 0x56;
-        cpu.c = 0x78;
-        cpu.f = 0b01000000;
+        cpu.registers.h = 0x12;
+        cpu.registers.l = 0x34;
+        cpu.registers.b = 0x56;
+        cpu.registers.c = 0x78;
+        cpu.registers.f = 0b01000000;
 
         cpu.execute(0x09, &mut mmu);
 
-        assert_eq!(cpu.bc(), 0x5678);
-        assert_eq!(cpu.hl(), 0x1234 + 0x5678);
-        assert_eq!(cpu.subtract_flag(), false); // Resets
-        assert_eq!(cpu.half_carry_flag(), false); //TODO
-        assert_eq!(cpu.carry_flag(), false); //TODO
+        assert_eq!(cpu.registers.bc(), 0x5678);
+        assert_eq!(cpu.registers.hl(), 0x1234 + 0x5678);
+        assert_eq!(cpu.registers.subtract_flag(), false); // Resets
+        assert_eq!(cpu.registers.half_carry_flag(), false); //TODO
+        assert_eq!(cpu.registers.carry_flag(), false); //TODO
     }
 
     #[test]
@@ -2217,25 +2173,25 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.a = 0b10000000;
+        cpu.registers.a = 0b10000000;
 
         cpu.execute(0x07, &mut mmu);
 
-        assert_eq!(cpu.a, 0b00000001);
-        assert_eq!(cpu.zero_flag(), false); // Reset
-        assert_eq!(cpu.subtract_flag(), false); // Reset
-        assert_eq!(cpu.half_carry_flag(), false); // Reset
-        assert_eq!(cpu.carry_flag(), true);
+        assert_eq!(cpu.registers.a, 0b00000001);
+        assert_eq!(cpu.registers.zero_flag(), false); // Reset
+        assert_eq!(cpu.registers.subtract_flag(), false); // Reset
+        assert_eq!(cpu.registers.half_carry_flag(), false); // Reset
+        assert_eq!(cpu.registers.carry_flag(), true);
 
-        cpu.a = 0b01111111;
+        cpu.registers.a = 0b01111111;
 
         cpu.execute(0x07, &mut mmu);
 
-        assert_eq!(cpu.a, 0b11111110);
-        assert_eq!(cpu.zero_flag(), false); // Reset
-        assert_eq!(cpu.subtract_flag(), false); // Reset
-        assert_eq!(cpu.half_carry_flag(), false); // Reset
-        assert_eq!(cpu.carry_flag(), false);
+        assert_eq!(cpu.registers.a, 0b11111110);
+        assert_eq!(cpu.registers.zero_flag(), false); // Reset
+        assert_eq!(cpu.registers.subtract_flag(), false); // Reset
+        assert_eq!(cpu.registers.half_carry_flag(), false); // Reset
+        assert_eq!(cpu.registers.carry_flag(), false);
     }
 
     #[test]
@@ -2243,13 +2199,13 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.b = 0xFF;
+        cpu.registers.b = 0xFF;
         cpu.pc = 0x0100;
         mmu.write_byte(0x0100, 0xAB);
 
         cpu.execute(0x06, &mut mmu);
 
-        assert_eq!(cpu.b, 0xAB);
+        assert_eq!(cpu.registers.b, 0xAB);
         assert_eq!(cpu.pc, 0x0101);
     }
 
@@ -2258,27 +2214,27 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.b = 0xFF;
-        cpu.f = 0b11110000;
+        cpu.registers.b = 0xFF;
+        cpu.registers.f = 0b11110000;
 
         cpu.execute(0x05, &mut mmu);
 
-        assert_eq!(cpu.b, 0xFE);
-        assert_eq!(cpu.zero_flag(), false); // Not zero
-        assert_eq!(cpu.subtract_flag(), true); // Always true
-                                               //TODO - assert_eq!(cpu.half_carry_flag(), false);
-        assert_eq!(cpu.carry_flag(), true); // Unaffected
+        assert_eq!(cpu.registers.b, 0xFE);
+        assert_eq!(cpu.registers.zero_flag(), false); // Not zero
+        assert_eq!(cpu.registers.subtract_flag(), true); // Always true
+                                               //TODO - assert_eq!(cpu.registers.half_carry_flag(), false);
+        assert_eq!(cpu.registers.carry_flag(), true); // Unaffected
 
-        cpu.b = 0x01;
-        cpu.f = 0b11100000;
+        cpu.registers.b = 0x01;
+        cpu.registers.f = 0b11100000;
 
         cpu.execute(0x06, &mut mmu);
 
-        assert_eq!(cpu.b, 0x00);
-        assert_eq!(cpu.zero_flag(), true); // Not zero
-        assert_eq!(cpu.subtract_flag(), true); // Always true
-                                               //TODO - assert_eq!(cpu.half_carry_flag(), false);
-        assert_eq!(cpu.carry_flag(), false); // Unaffected
+        assert_eq!(cpu.registers.b, 0x00);
+        assert_eq!(cpu.registers.zero_flag(), true); // Not zero
+        assert_eq!(cpu.registers.subtract_flag(), true); // Always true
+                                               //TODO - assert_eq!(cpu.registers.half_carry_flag(), false);
+        assert_eq!(cpu.registers.carry_flag(), false); // Unaffected
     }
 
     #[test]
@@ -2286,16 +2242,16 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.b = 0xEE;
-        cpu.f = 0b11110000;
+        cpu.registers.b = 0xEE;
+        cpu.registers.f = 0b11110000;
 
         cpu.execute(0x04, &mut mmu);
 
-        assert_eq!(cpu.b, 0xEF);
-        assert_eq!(cpu.zero_flag(), false); // Not zero
-        assert_eq!(cpu.subtract_flag(), false); // Reset
-                                                //TODO - assert_eq!(cpu.half_carry_flag(), false);
-        assert_eq!(cpu.carry_flag(), true); // Unaffected
+        assert_eq!(cpu.registers.b, 0xEF);
+        assert_eq!(cpu.registers.zero_flag(), false); // Not zero
+        assert_eq!(cpu.registers.subtract_flag(), false); // Reset
+                                                //TODO - assert_eq!(cpu.registers.half_carry_flag(), false);
+        assert_eq!(cpu.registers.carry_flag(), true); // Unaffected
     }
 
     #[test]
@@ -2303,12 +2259,12 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.b = 0xEE;
-        cpu.c = 0xE0;
+        cpu.registers.b = 0xEE;
+        cpu.registers.c = 0xE0;
 
         cpu.execute(0x03, &mut mmu);
 
-        assert_eq!(cpu.bc(), 0xEEE1);
+        assert_eq!(cpu.registers.bc(), 0xEEE1);
     }
 
     #[test]
@@ -2316,9 +2272,9 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.a = 0xFF;
-        cpu.b = 0x12;
-        cpu.c = 0x34;
+        cpu.registers.a = 0xFF;
+        cpu.registers.b = 0x12;
+        cpu.registers.c = 0x34;
         mmu.write_byte(0x1234, 0);
 
         cpu.execute(0x02, &mut mmu);
@@ -2337,7 +2293,7 @@ mod tests {
 
         cpu.execute(0x01, &mut mmu);
 
-        assert_eq!(cpu.bc(), 0x1234);
+        assert_eq!(cpu.registers.bc(), 0x1234);
         assert_eq!(cpu.pc, 0x102);
     }
 
@@ -2391,80 +2347,80 @@ mod tests {
     fn test_8bit_regs_to_16_bit_regs() {
         let mut cpu = CPU::new();
 
-        cpu.a = 0xDE;
-        cpu.f = 0xAD;
+        cpu.registers.a = 0xDE;
+        cpu.registers.f = 0xAD;
 
-        cpu.b = 0xBE;
-        cpu.c = 0xEF;
+        cpu.registers.b = 0xBE;
+        cpu.registers.c = 0xEF;
 
-        cpu.d = 0x12;
-        cpu.e = 0x34;
+        cpu.registers.d = 0x12;
+        cpu.registers.e = 0x34;
 
-        cpu.h = 0xAB;
-        cpu.l = 0xCD;
+        cpu.registers.h = 0xAB;
+        cpu.registers.l = 0xCD;
 
-        assert_eq!(cpu.af(), 0xDEAD);
-        assert_eq!(cpu.bc(), 0xBEEF);
-        assert_eq!(cpu.de(), 0x1234);
-        assert_eq!(cpu.hl(), 0xABCD);
+        assert_eq!(cpu.registers.af(), 0xDEAD);
+        assert_eq!(cpu.registers.bc(), 0xBEEF);
+        assert_eq!(cpu.registers.de(), 0x1234);
+        assert_eq!(cpu.registers.hl(), 0xABCD);
     }
 
     #[test]
     fn test_set_flags() {
         let mut cpu = CPU::new();
 
-        cpu.f = 0x00;
-        cpu.set_flags(true, false, false, true);
+        cpu.registers.f = 0x00;
+        cpu.registers.set_flags(true, false, false, true);
 
-        assert_eq!(cpu.zero_flag(), true);
-        assert_eq!(cpu.subtract_flag(), false);
-        assert_eq!(cpu.half_carry_flag(), false);
-        assert_eq!(cpu.carry_flag(), true);
+        assert_eq!(cpu.registers.zero_flag(), true);
+        assert_eq!(cpu.registers.subtract_flag(), false);
+        assert_eq!(cpu.registers.half_carry_flag(), false);
+        assert_eq!(cpu.registers.carry_flag(), true);
 
-        cpu.set_flags(true, true, true, false);
+        cpu.registers.set_flags(true, true, true, false);
 
-        assert_eq!(cpu.zero_flag(), true);
-        assert_eq!(cpu.subtract_flag(), true);
-        assert_eq!(cpu.half_carry_flag(), true);
-        assert_eq!(cpu.carry_flag(), false);
+        assert_eq!(cpu.registers.zero_flag(), true);
+        assert_eq!(cpu.registers.subtract_flag(), true);
+        assert_eq!(cpu.registers.half_carry_flag(), true);
+        assert_eq!(cpu.registers.carry_flag(), false);
     }
 
     #[test]
     fn test_flags() {
         let mut cpu = CPU::new();
 
-        cpu.a = 0xDE;
-        cpu.f = 0xF0;
+        cpu.registers.a = 0xDE;
+        cpu.registers.f = 0xF0;
 
-        assert_eq!(cpu.zero_flag(), true);
-        assert_eq!(cpu.subtract_flag(), true);
-        assert_eq!(cpu.half_carry_flag(), true);
-        assert_eq!(cpu.carry_flag(), true);
+        assert_eq!(cpu.registers.zero_flag(), true);
+        assert_eq!(cpu.registers.subtract_flag(), true);
+        assert_eq!(cpu.registers.half_carry_flag(), true);
+        assert_eq!(cpu.registers.carry_flag(), true);
 
-        cpu.f = 0x00;
+        cpu.registers.f = 0x00;
 
-        assert_eq!(cpu.zero_flag(), false);
-        assert_eq!(cpu.subtract_flag(), false);
-        assert_eq!(cpu.half_carry_flag(), false);
-        assert_eq!(cpu.carry_flag(), false);
+        assert_eq!(cpu.registers.zero_flag(), false);
+        assert_eq!(cpu.registers.subtract_flag(), false);
+        assert_eq!(cpu.registers.half_carry_flag(), false);
+        assert_eq!(cpu.registers.carry_flag(), false);
     }
 
     #[test]
     fn test_initial_register_values() {
         let cpu = CPU::new();
 
-        assert_eq!(cpu.af(), 0x01B0);
-        assert_eq!(cpu.bc(), 0x0013);
-        assert_eq!(cpu.de(), 0x00D8);
-        assert_eq!(cpu.hl(), 0x014D);
+        assert_eq!(cpu.registers.af(), 0x01B0);
+        assert_eq!(cpu.registers.bc(), 0x0013);
+        assert_eq!(cpu.registers.de(), 0x00D8);
+        assert_eq!(cpu.registers.hl(), 0x014D);
         assert_eq!(cpu.sp, 0xFFFE);
         assert_eq!(cpu.pc, 0x0100);
     }
 
     fn assert_flags(cpu: &CPU, zero: bool, subtract: bool, half_carry: bool, carry: bool) {
-        assert_eq!(cpu.zero_flag(), zero);
-        assert_eq!(cpu.subtract_flag(), subtract);
-        assert_eq!(cpu.half_carry_flag(), half_carry);
-        assert_eq!(cpu.carry_flag(), carry);
+        assert_eq!(cpu.registers.zero_flag(), zero);
+        assert_eq!(cpu.registers.subtract_flag(), subtract);
+        assert_eq!(cpu.registers.half_carry_flag(), half_carry);
+        assert_eq!(cpu.registers.carry_flag(), carry);
     }
 }
