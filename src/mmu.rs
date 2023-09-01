@@ -40,10 +40,10 @@ impl Memory for MMU {
             0xA000..=0xBFFF => self.cartridge.read_ram(address),
             0xC000..=0xDFFF => self.wram[(address - 0xC000) as usize],
             0xE000..=0xFDFF => self.wram[(address - 0xE000 - 0x2000) as usize], // echo RAM
-            0xFE00..=0xFE9F => 0,                                    //TODO - OAM
-            0xFEA0..=0xFEFF => 0,                                    // Not usable
-            0xFF00..=0xFF7F => 0,                                    //TODO - I/O
-            0xFF80..=0xFFFE => 0,                                    //TODO - High ram (?)
+            0xFE00..=0xFE9F => todo!("OAM"),        //TODO - OAM
+            0xFEA0..=0xFEFF => todo!("Not Usable"), //TODO - Not usable
+            0xFF00..=0xFF7F => todo!("I/O"),        //TODO - I/O
+            0xFF80..=0xFFFE => todo!("High RAM"),   //TODO - High ram (?)
             0xFFFF => 0, //TODO - Interrupt enable register
         }
     }

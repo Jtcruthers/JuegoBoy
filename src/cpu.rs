@@ -29,7 +29,6 @@ impl CPU {
 
     pub fn step(&mut self, mmu: &mut impl Memory) -> u8 {
         if self.halted {
-            self.halted = false;
             return 1
         }
         let opcode = self.fetch(mmu);
@@ -115,9 +114,8 @@ impl CPU {
     }
 
     fn swap(&mut self, reg: Register) {
-        let carry_bit = (self.registers[reg] & 0b10000000) >> 7;
-        self.registers[reg] = (self.registers[reg] << 1) + (self.registers.carry_flag() as u8);
-        self.registers.set_flags(false, false, false, carry_bit > 0);
+        self.registers[reg] = ((self.registers[reg] & 0x0F) << 4) + ((self.registers[reg] & 0xF0) >> 4);
+        self.registers.set_flags(self.registers[reg] > 0, false, false, false);
     }
 
     fn read_u16(&mut self, address: u16, mmu: &mut impl Memory) -> u16 {
@@ -439,10 +437,11 @@ impl CPU {
             }
             0x20 => self.jump_relative(!self.registers.zero_flag(), mmu),
             0x21 => {
-                self.registers.l = mmu.read_byte(self.pc);
-                self.pc += 1;
-                self.registers.h = mmu.read_byte(self.pc);
-                self.pc += 1;
+                let value = self.read_u16(self.pc, mmu);
+                self.pc += 2;
+                let (upper, lower) = self.u16_to_u8s(value);
+                self.registers.h = upper;
+                self.registers.l = lower;
                 3
             }
             0x22 => {
@@ -473,6 +472,7 @@ impl CPU {
             }
             0x27 => {
                 todo!(); // DAA
+                         // 4 cycles
             }
             0x28 => self.jump_relative(self.registers.zero_flag(), mmu),
             0x29 => self.add_u16_to_hl(self.registers.hl()),
@@ -510,7 +510,7 @@ impl CPU {
                     true,
                     self.registers.carry_flag(),
                 );
-                1
+                4
             }
             0x30 => self.jump_relative(!self.registers.carry_flag(), mmu),
             0x31 => {
@@ -586,7 +586,7 @@ impl CPU {
                     false,
                     !self.registers.carry_flag(),
                 );
-                1
+                4
             }
             0x40 => self.load_reg_to_reg(B, B),
             0x41 => self.load_reg_to_reg(B, C),
@@ -1210,7 +1210,7 @@ impl CPU {
                 4
             }
             0xE9 => {
-                self.pc = self.read_u16(self.registers.hl(), mmu);
+                self.pc = self.registers.hl();
                 4
             }
             0xEA => {
@@ -1963,6 +1963,38 @@ mod tests {
     }
 
     #[test]
+    fn test_swap() {
+        let mut cpu = CPU::new();
+        cpu.registers[A] = 0xAB;
+        cpu.swap(A);
+        assert_eq!(cpu.registers[A], 0xBA);
+    }
+
+    #[test]
+    fn test_set() {
+        let mut cpu = CPU::new();
+        cpu.registers[A] = 0b00000000;
+        cpu.set(3, A);
+        assert_eq!(cpu.registers[A], 0b00001000);
+
+        cpu.registers[A] = 0b00000000;
+        cpu.set(7, A);
+        assert_eq!(cpu.registers[A], 0b10000000);
+    }
+
+    #[test]
+    fn test_res() {
+        let mut cpu = CPU::new();
+        cpu.registers[A] = 0b11111111;
+        cpu.res(3, A);
+        assert_eq!(cpu.registers[A], 0b11110111);
+
+        cpu.registers[A] = 0b11111111;
+        cpu.res(7, A);
+        assert_eq!(cpu.registers[A], 0b01111111);
+    }
+
+    #[test]
     fn test_srl() {
         let mut cpu = CPU::new();
         cpu.registers[A] = 0b10001010;
@@ -2208,6 +2240,33 @@ mod tests {
         cpu.registers.a = 0x00;
         cpu.cp_a(0x33);
         assert_eq!(cpu.registers.f, 0b01110000);
+    }
+
+    #[test]
+    fn test_0x47_load_a_into_b() {
+        let (mut cpu, mut mmu) = get_cpu_and_mmu();
+
+        cpu.registers.a = 0x12;
+        cpu.registers.b = 0x34;
+
+        cpu.execute(0x47, &mut mmu);
+
+        assert_eq!(cpu.registers.a, 0x12);
+        assert_eq!(cpu.registers.b, 0x12);
+    }
+
+    #[test]
+    fn test_0xe9_load_a_into_b() {
+        let (mut cpu, mut mmu) = get_cpu_and_mmu();
+
+        cpu.pc = 0;
+        cpu.registers.h = 0x12;
+        cpu.registers.l = 0x34;
+
+        cpu.execute(0xe9, &mut mmu);
+
+        assert_eq!(cpu.pc, 0x1234);
+        assert_eq!(cpu.registers.hl(), 0x1234);
     }
 
     #[test]
