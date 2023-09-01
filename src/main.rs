@@ -7,6 +7,7 @@ mod gameboy;
 mod mmu;
 mod ppu;
 mod registers;
+mod cartridge;
 
 #[derive(Parser, Debug)]
 #[command(author = "Justin Carruthers", about = "Configurable CHIP-8 (and variants) emulator")]
@@ -17,6 +18,7 @@ struct Args {
 fn main() {
     let args = Args::parse();
     let rom = fs::read(&args.rom_name).expect("Cant read the rom");
-    let mut gameboy = gameboy::Gameboy::new();
-    gameboy.run(rom);
+    let mut gameboy = gameboy::Gameboy::new(rom);
+
+    gameboy.run()
 }

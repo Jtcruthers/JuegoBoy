@@ -168,5 +168,75 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_call() {}
+    fn test_8bit_regs_to_16_bit_regs() {
+        let mut regs = Registers::new();
+
+        regs.a = 0xDE;
+        regs.f = 0xAD;
+
+        regs.b = 0xBE;
+        regs.c = 0xEF;
+
+        regs.d = 0x12;
+        regs.e = 0x34;
+
+        regs.h = 0xAB;
+        regs.l = 0xCD;
+
+        assert_eq!(regs.af(), 0xDEAD);
+        assert_eq!(regs.bc(), 0xBEEF);
+        assert_eq!(regs.de(), 0x1234);
+        assert_eq!(regs.hl(), 0xABCD);
+    }
+
+    #[test]
+    fn test_set_flags() {
+        let mut regs = Registers::new();
+
+        regs.f = 0x00;
+        regs.set_flags(true, false, false, true);
+
+        assert_eq!(regs.zero_flag(), true);
+        assert_eq!(regs.subtract_flag(), false);
+        assert_eq!(regs.half_carry_flag(), false);
+        assert_eq!(regs.carry_flag(), true);
+
+        regs.set_flags(true, true, true, false);
+
+        assert_eq!(regs.zero_flag(), true);
+        assert_eq!(regs.subtract_flag(), true);
+        assert_eq!(regs.half_carry_flag(), true);
+        assert_eq!(regs.carry_flag(), false);
+    }
+
+    #[test]
+    fn test_flags() {
+        let mut regs = Registers::new();
+
+        regs.a = 0xDE;
+        regs.f = 0xF0;
+
+        assert_eq!(regs.zero_flag(), true);
+        assert_eq!(regs.subtract_flag(), true);
+        assert_eq!(regs.half_carry_flag(), true);
+        assert_eq!(regs.carry_flag(), true);
+
+        regs.f = 0x00;
+
+        assert_eq!(regs.zero_flag(), false);
+        assert_eq!(regs.subtract_flag(), false);
+        assert_eq!(regs.half_carry_flag(), false);
+        assert_eq!(regs.carry_flag(), false);
+    }
+
+    #[test]
+    fn test_initial_register_values() {
+        let mut regs = Registers::new();
+
+        assert_eq!(regs.af(), 0x01B0);
+        assert_eq!(regs.bc(), 0x0013);
+        assert_eq!(regs.de(), 0x00D8);
+        assert_eq!(regs.hl(), 0x014D);
+    }
+
 }

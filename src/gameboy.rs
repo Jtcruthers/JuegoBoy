@@ -1,33 +1,29 @@
 use crate::apu::APU;
 use crate::cpu::CPU;
-use crate::mmu::TestMMU;
+use crate::mmu::MMU;
 use crate::ppu::PPU;
+use crate::cartridge::Cartridge;
 
 pub struct Gameboy {
     cpu: CPU,
     apu: APU,
     ppu: PPU,
-    mmu: TestMMU,
+    mmu: MMU,
 }
 
 impl Gameboy {
-    pub fn new() -> Self {
+    pub fn new(rom: Vec<u8>) -> Self {
         Gameboy {
             cpu: CPU::new(),
             ppu: PPU::new(),
             apu: APU::new(),
-            mmu: TestMMU::new(),
+            mmu: MMU::new(
+                Cartridge::new(rom)
+            ),
         }
     }
 
-    fn load_rom(&mut self, rom: Vec<u8>) {
-        for (offset, byte) in rom.iter().enumerate() {
-            self.mmu.memory[offset] = *byte;
-        }
-    }
-
-    pub fn run(&mut self, rom: Vec<u8>) {
-        self.load_rom(rom);
+    pub fn run(&mut self) {
         loop {
             self.cpu.step(&mut self.mmu);
         }

@@ -3135,75 +3135,9 @@ mod tests {
     }
 
     #[test]
-    fn test_8bit_regs_to_16_bit_regs() {
-        let mut cpu = CPU::new();
-
-        cpu.registers.a = 0xDE;
-        cpu.registers.f = 0xAD;
-
-        cpu.registers.b = 0xBE;
-        cpu.registers.c = 0xEF;
-
-        cpu.registers.d = 0x12;
-        cpu.registers.e = 0x34;
-
-        cpu.registers.h = 0xAB;
-        cpu.registers.l = 0xCD;
-
-        assert_eq!(cpu.registers.af(), 0xDEAD);
-        assert_eq!(cpu.registers.bc(), 0xBEEF);
-        assert_eq!(cpu.registers.de(), 0x1234);
-        assert_eq!(cpu.registers.hl(), 0xABCD);
-    }
-
-    #[test]
-    fn test_set_flags() {
-        let mut cpu = CPU::new();
-
-        cpu.registers.f = 0x00;
-        cpu.registers.set_flags(true, false, false, true);
-
-        assert_eq!(cpu.registers.zero_flag(), true);
-        assert_eq!(cpu.registers.subtract_flag(), false);
-        assert_eq!(cpu.registers.half_carry_flag(), false);
-        assert_eq!(cpu.registers.carry_flag(), true);
-
-        cpu.registers.set_flags(true, true, true, false);
-
-        assert_eq!(cpu.registers.zero_flag(), true);
-        assert_eq!(cpu.registers.subtract_flag(), true);
-        assert_eq!(cpu.registers.half_carry_flag(), true);
-        assert_eq!(cpu.registers.carry_flag(), false);
-    }
-
-    #[test]
-    fn test_flags() {
-        let mut cpu = CPU::new();
-
-        cpu.registers.a = 0xDE;
-        cpu.registers.f = 0xF0;
-
-        assert_eq!(cpu.registers.zero_flag(), true);
-        assert_eq!(cpu.registers.subtract_flag(), true);
-        assert_eq!(cpu.registers.half_carry_flag(), true);
-        assert_eq!(cpu.registers.carry_flag(), true);
-
-        cpu.registers.f = 0x00;
-
-        assert_eq!(cpu.registers.zero_flag(), false);
-        assert_eq!(cpu.registers.subtract_flag(), false);
-        assert_eq!(cpu.registers.half_carry_flag(), false);
-        assert_eq!(cpu.registers.carry_flag(), false);
-    }
-
-    #[test]
     fn test_initial_register_values() {
         let cpu = CPU::new();
 
-        assert_eq!(cpu.registers.af(), 0x01B0);
-        assert_eq!(cpu.registers.bc(), 0x0013);
-        assert_eq!(cpu.registers.de(), 0x00D8);
-        assert_eq!(cpu.registers.hl(), 0x014D);
         assert_eq!(cpu.sp, 0xFFFE);
         assert_eq!(cpu.pc, 0x0100);
     }
