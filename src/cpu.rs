@@ -1,6 +1,7 @@
 use crate::mmu::Memory;
-use crate::registers::Register::*;
-use crate::registers::{Register, Registers};
+use crate::registers::{Register, Register::*, Register16, Register16::*};
+use crate::registers::Registers;
+
 
 pub struct CPU {
     registers: Registers,
@@ -96,8 +97,7 @@ impl CPU {
 
     fn bit(&mut self, bit: u8, reg: Register) -> u8 {
         let bit_is_set = self.registers[reg] & (1 << bit) > 0;
-        self.registers
-            .set_flags(bit_is_set, false, true, self.registers.carry_flag());
+        self.registers.set_flags(bit_is_set, false, true, self.registers.carry_flag());
         2
     }
 
@@ -204,46 +204,51 @@ impl CPU {
         self.halted = true;
     }
 
-    fn add_a(&mut self, value: u8) {
+    fn add_a(&mut self, value: u8) -> u8 {
         let old_a = self.registers.a;
         let new_a = self.registers.a.wrapping_add(value);
         let half_carry = (old_a & 0x0F) + (value & 0x0F) > 0x0F;
         self.registers
             .set_flags(new_a == 0, false, half_carry, new_a < old_a);
         self.registers.a = new_a;
+        1
     }
 
-    fn sub_a(&mut self, value: u8) {
+    fn sub_a(&mut self, value: u8) -> u8 {
         let old_a = self.registers.a;
         let new_a = self.registers.a.wrapping_sub(value);
         let half_carry = (old_a & 0x0F) < (value & 0x0F);
-        self.registers
-            .set_flags(new_a == 0, true, half_carry, new_a > old_a);
+        self.registers.set_flags(new_a == 0, true, half_carry, new_a > old_a);
         self.registers.a = new_a;
+        1
     }
 
-    fn and_a(&mut self, value: u8) {
+    fn and_a(&mut self, value: u8) -> u8 {
         self.registers.a &= value;
         self.registers
             .set_flags(self.registers.a == 0, false, true, false);
+        1
     }
 
-    fn xor_a(&mut self, value: u8) {
+    fn xor_a(&mut self, value: u8) -> u8 {
         self.registers.a ^= value;
         self.registers
             .set_flags(self.registers.a == 0, false, false, false);
+        1
     }
 
-    fn or_a(&mut self, value: u8) {
+    fn or_a(&mut self, value: u8) -> u8 {
         self.registers.a |= value;
         self.registers
             .set_flags(self.registers.a == 0, false, false, false);
+        1
     }
 
-    fn cp_a(&mut self, value: u8) {
+    fn cp_a(&mut self, value: u8) -> u8 {
         let h = (self.registers.a & 0x0F) < (value & 0x0F);
         self.registers
-            .set_flags(self.registers.a == value, true, h, self.registers.a < value)
+            .set_flags(self.registers.a == value, true, h, self.registers.a < value);
+        1
     }
 
     fn ret(&mut self, condition: bool, mmu: &mut impl Memory) -> u8 {
@@ -268,12 +273,13 @@ impl CPU {
     }
 
     /** Put value onto the stack and decrement sp */
-    fn push(&mut self, value: u16, mmu: &mut impl Memory) {
+    fn push(&mut self, value: u16, mmu: &mut impl Memory) -> u8 {
         let (upper, lower) = self.u16_to_u8s(value);
         self.sp -= 1;
         mmu.write_byte(self.sp, upper);
         self.sp -= 1;
         mmu.write_byte(self.sp, lower);
+        4
     }
 
     fn interrupt_service_routine(&mut self, mmu: &mut impl Memory) -> u8 {
@@ -281,43 +287,72 @@ impl CPU {
         0
     }
 
-    fn load_reg_to_reg(&mut self, to: Register, from: Register) -> u8 {
+    fn load_reg_from_reg(&mut self, to: Register, from: Register) -> u8 {
         self.registers[to] = self.registers[from];
         1
     }
-
+    
+    fn load_addr_from_reg(&mut self, addr: u16, reg: Register, mmu: &mut impl Memory) -> u8 {
+        mmu.write_byte(addr, self.registers[reg]);
+        2
+    }
+    
+    fn load_reg16_from_pc(&mut self, reg: Register16, mmu: &mut impl Memory) -> u8 {
+        let value = self.read_u16(self.pc, mmu);
+        self.pc += 2;
+        match reg {
+            BC => self.registers.set_16(BC, value),
+            DE => self.registers.set_16(DE, value),
+            HL => self.registers.set_16(HL, value),
+            SP => self.sp = value,
+            _ => panic!("Invalid 16-bit register")
+        }
+        3
+    }
+    
+    fn inc_reg(&mut self, reg: Register) -> u8 {
+        self.registers[reg] = self.inc_u8_and_set_flags(self.registers[reg]);
+        1
+    }
+    
+    fn dec_reg(&mut self, reg: Register) -> u8 {
+        self.registers[reg] = self.dec_u8_and_set_flags(self.registers[reg]);
+        1
+    }
+    
+    fn inc_reg16(&mut self, reg: Register16) -> u8 {
+        let value = match reg {
+            SP => self.sp,
+            PC => self.pc,
+            _ => self.registers.get_reg16(reg)
+        };
+        let (upper, lower) = self.u16_to_u8s(value.wrapping_add(1));
+        self.registers[B] = upper;
+        self.registers[C] = lower;
+        2
+    }
+    
     pub fn execute(&mut self, opcode: u8, mmu: &mut impl Memory) -> u8 {
         if opcode != 0x00 {
             println!("Executing opcode: {:02X} from {:04X}", opcode, self.pc);
         }
         match opcode {
             0x00 => 1,
-            0x01 => {
-                self.registers.c = mmu.read_byte(self.pc);
-                self.registers.b = mmu.read_byte(self.pc + 1);
-                self.pc += 2;
-                3
-            }
+            0x01 => self.load_reg16_from_pc(BC, mmu),
             0x02 => {
                 mmu.write_byte(self.registers.bc(), self.registers.a);
                 2
             }
             0x03 => {
                 let (upper, lower) = self.u16_to_u8s(self.registers.bc().wrapping_add(1));
-                self.registers.b = upper;
-                self.registers.c = lower;
+                self.registers[B] = upper;
+                self.registers[C] = lower;
                 2
             }
-            0x04 => {
-                self.registers.b = self.inc_u8_and_set_flags(self.registers.b);
-                1
-            }
-            0x05 => {
-                self.registers.b = self.dec_u8_and_set_flags(self.registers.b);
-                1
-            }
+            0x04 => self.inc_reg(B),
+            0x05 => self.dec_reg(B),
             0x06 => {
-                self.registers.b = mmu.read_byte(self.pc);
+                self.registers[B] = mmu.read_byte(self.pc);
                 self.pc += 1;
                 2
             }
@@ -346,14 +381,8 @@ impl CPU {
                 self.registers.c = lower;
                 2
             }
-            0x0C => {
-                self.registers.c = self.inc_u8_and_set_flags(self.registers.c);
-                1
-            }
-            0x0D => {
-                self.registers.c = self.dec_u8_and_set_flags(self.registers.c);
-                1
-            }
+            0x0C => self.inc_reg(C),
+            0x0D => self.dec_reg(C),
             0x0E => {
                 self.registers.c = mmu.read_byte(self.pc);
                 self.pc += 1;
@@ -367,12 +396,7 @@ impl CPU {
                 self.halt();
                 1
             }
-            0x11 => {
-                self.registers.e = mmu.read_byte(self.pc);
-                self.registers.d = mmu.read_byte(self.pc + 1);
-                self.pc += 2;
-                3
-            }
+            0x11 => self.load_reg16_from_pc(DE, mmu),
             0x12 => {
                 mmu.write_byte(self.registers.de(), self.registers.a);
                 2
@@ -383,14 +407,8 @@ impl CPU {
                 self.registers.e = lower;
                 2
             }
-            0x14 => {
-                self.registers.d = self.inc_u8_and_set_flags(self.registers.d);
-                1
-            }
-            0x15 => {
-                self.registers.d = self.dec_u8_and_set_flags(self.registers.d);
-                1
-            }
+            0x14 => self.inc_reg(D),
+            0x15 => self.dec_reg(D),
             0x16 => {
                 self.registers.d = mmu.read_byte(self.pc);
                 self.pc += 1;
@@ -415,14 +433,8 @@ impl CPU {
                 self.registers.e = lower;
                 2
             }
-            0x1C => {
-                self.registers.e = self.inc_u8_and_set_flags(self.registers.e);
-                1
-            }
-            0x1D => {
-                self.registers.e = self.dec_u8_and_set_flags(self.registers.e);
-                1
-            }
+            0x1C => self.inc_reg(E),
+            0x1D => self.dec_reg(E),
             0x1E => {
                 self.registers.e = mmu.read_byte(self.pc);
                 self.pc += 1;
@@ -436,14 +448,7 @@ impl CPU {
                 1
             }
             0x20 => self.jump_relative(!self.registers.zero_flag(), mmu),
-            0x21 => {
-                let value = self.read_u16(self.pc, mmu);
-                self.pc += 2;
-                let (upper, lower) = self.u16_to_u8s(value);
-                self.registers.h = upper;
-                self.registers.l = lower;
-                3
-            }
+            0x21 => self.load_reg16_from_pc(HL, mmu),
             0x22 => {
                 mmu.write_byte(self.registers.hl(), self.registers.a);
                 let new_hl = self.registers.hl().wrapping_add(1);
@@ -457,14 +462,8 @@ impl CPU {
                 self.registers.l = lower;
                 2
             }
-            0x24 => {
-                self.registers.h = self.inc_u8_and_set_flags(self.registers.h);
-                1
-            }
-            0x25 => {
-                self.registers.h = self.dec_u8_and_set_flags(self.registers.h);
-                1
-            }
+            0x24 => self.inc_reg(H),
+            0x25 => self.dec_reg(H),
             0x26 => {
                 self.registers.h = mmu.read_byte(self.pc);
                 self.pc += 1;
@@ -489,14 +488,8 @@ impl CPU {
                 self.registers.l = lower;
                 2
             }
-            0x2C => {
-                self.registers.l = self.inc_u8_and_set_flags(self.registers.l);
-                1
-            }
-            0x2D => {
-                self.registers.l = self.dec_u8_and_set_flags(self.registers.l);
-                1
-            }
+            0x2C => self.inc_reg(L),
+            0x2D => self.dec_reg(L),
             0x2E => {
                 self.registers.l = mmu.read_byte(self.pc);
                 self.pc += 1;
@@ -513,11 +506,7 @@ impl CPU {
                 4
             }
             0x30 => self.jump_relative(!self.registers.carry_flag(), mmu),
-            0x31 => {
-                self.sp = self.read_u16(self.pc, mmu);
-                self.pc += 2;
-                3
-            }
+            0x31 => self.load_reg16_from_pc(SP, mmu),
             0x32 => {
                 mmu.write_byte(self.registers.hl(), self.registers.a);
                 let new_hl = self.registers.hl().wrapping_sub(1);
@@ -566,14 +555,8 @@ impl CPU {
                 self.sp = self.sp.wrapping_sub(1);
                 2
             }
-            0x3C => {
-                self.registers.a = self.inc_u8_and_set_flags(self.registers.a);
-                1
-            }
-            0x3D => {
-                self.registers.a = self.dec_u8_and_set_flags(self.registers.a);
-                1
-            }
+            0x3C => self.inc_reg(A),
+            0x3D => self.dec_reg(A),
             0x3E => {
                 self.registers.a = mmu.read_byte(self.pc);
                 self.pc += 1;
@@ -588,181 +571,81 @@ impl CPU {
                 );
                 4
             }
-            0x40 => self.load_reg_to_reg(B, B),
-            0x41 => self.load_reg_to_reg(B, C),
-            0x42 => self.load_reg_to_reg(B, D),
-            0x43 => self.load_reg_to_reg(B, E),
-            0x44 => self.load_reg_to_reg(B, H),
-            0x45 => self.load_reg_to_reg(B, L),
+            0x40 => self.load_reg_from_reg(B, B),
+            0x41 => self.load_reg_from_reg(B, C),
+            0x42 => self.load_reg_from_reg(B, D),
+            0x43 => self.load_reg_from_reg(B, E),
+            0x44 => self.load_reg_from_reg(B, H),
+            0x45 => self.load_reg_from_reg(B, L),
             0x46 => {
-                self.registers.b = mmu.read_byte(self.registers.hl());
+                self.registers[B] = mmu.read_byte(self.registers.hl());
                 2
             }
-            0x47 => self.load_reg_to_reg(B, A),
+            0x47 => self.load_reg_from_reg(B, A),
 
-            0x48 => self.load_reg_to_reg(C, A),
-            0x49 => self.load_reg_to_reg(C, B),
-            0x4A => {
-                self.registers.c = self.registers.d;
-                1
-            }
-            0x4B => {
-                self.registers.c = self.registers.e;
-                1
-            }
+            0x48 => self.load_reg_from_reg(C, A),
+            0x49 => self.load_reg_from_reg(C, B),
+            0x4A => self.load_reg_from_reg(C, D),
+            0x4B => self.load_reg_from_reg(C, E),
             0x4C => {
-                self.registers.c = self.registers.h;
-                1
-            }
-            0x4D => {
-                self.registers.c = self.registers.l;
-                1
-            }
+                self.load_reg_from_reg(C, F)
+            },
+            0x4D => self.load_reg_from_reg(C, L),
             0x4E => {
-                self.registers.c = mmu.read_byte(self.registers.hl());
+                self.registers[C] = mmu.read_byte(self.registers.hl());
                 2
             }
-            0x4F => {
-                self.registers.c = self.registers.a;
-                1
-            }
+            0x4F => self.load_reg_from_reg(C, A),
 
-            0x50 => {
-                self.registers.d = self.registers.b;
-                1
-            }
-            0x51 => {
-                self.registers.d = self.registers.c;
-                1
-            }
-            0x52 => {
-                self.registers.d = self.registers.d;
-                1
-            }
-            0x53 => {
-                self.registers.d = self.registers.e;
-                1
-            }
-            0x54 => {
-                self.registers.d = self.registers.h;
-                1
-            }
-            0x55 => {
-                self.registers.d = self.registers.l;
-                1
-            }
+            0x50 => self.load_reg_from_reg(D, B),
+            0x51 => self.load_reg_from_reg(D, C),
+            0x52 => self.load_reg_from_reg(D, D),
+            0x53 => self.load_reg_from_reg(D, E),
+            0x54 => self.load_reg_from_reg(D, H),
+            0x55 => self.load_reg_from_reg(D, L),
             0x56 => {
-                self.registers.d = mmu.read_byte(self.registers.hl());
+                self.registers[D] = mmu.read_byte(self.registers.hl());
                 2
             }
-            0x57 => {
-                self.registers.d = self.registers.a;
-                1
-            }
+            0x57 => self.load_reg_from_reg(D, A),
 
-            0x58 => {
-                self.registers.e = self.registers.b;
-                1
-            }
-            0x59 => {
-                self.registers.e = self.registers.c;
-                1
-            }
-            0x5A => {
-                self.registers.e = self.registers.d;
-                1
-            }
-            0x5B => {
-                self.registers.e = self.registers.e;
-                1
-            }
-            0x5C => {
-                self.registers.e = self.registers.h;
-                1
-            }
-            0x5D => {
-                self.registers.e = self.registers.l;
-                1
-            }
+            0x58 => self.load_reg_from_reg(E, B),
+            0x59 => self.load_reg_from_reg(E, C),
+            0x5A => self.load_reg_from_reg(E, D),
+            0x5B => self.load_reg_from_reg(E, E),
+            0x5C => self.load_reg_from_reg(E, H),
+            0x5D => self.load_reg_from_reg(E, L),
             0x5E => {
-                self.registers.e = mmu.read_byte(self.registers.hl());
+                self.registers[E] = mmu.read_byte(self.registers.hl());
                 2
             }
-            0x5F => {
-                self.registers.e = self.registers.a;
-                1
-            }
+            0x5F => self.load_reg_from_reg(E, A),
 
-            0x60 => {
-                self.registers.h = self.registers.b;
-                1
-            }
-            0x61 => {
-                self.registers.h = self.registers.c;
-                1
-            }
-            0x62 => {
-                self.registers.h = self.registers.d;
-                1
-            }
-            0x63 => {
-                self.registers.h = self.registers.e;
-                1
-            }
-            0x64 => {
-                self.registers.h = self.registers.h;
-                1
-            }
-            0x65 => {
-                self.registers.h = self.registers.l;
-                1
-            }
+            0x60 => self.load_reg_from_reg(H, B),
+            0x61 => self.load_reg_from_reg(H, C),
+            0x62 => self.load_reg_from_reg(H, D),
+            0x63 => self.load_reg_from_reg(H, E),
+            0x64 => self.load_reg_from_reg(H, H),
+            0x65 => self.load_reg_from_reg(H, L),
             0x66 => {
-                self.registers.h = mmu.read_byte(self.registers.hl());
+                self.registers[H] = mmu.read_byte(self.registers.hl());
                 2
             }
-            0x67 => {
-                self.registers.h = self.registers.a;
-                1
-            }
+            0x67 => self.load_reg_from_reg(H, A),
 
-            0x68 => {
-                self.registers.l = self.registers.b;
-                1
-            }
-            0x69 => {
-                self.registers.l = self.registers.c;
-                1
-            }
-            0x6A => {
-                self.registers.l = self.registers.d;
-                1
-            }
-            0x6B => {
-                self.registers.l = self.registers.e;
-                1
-            }
-            0x6C => {
-                self.registers.l = self.registers.h;
-                1
-            }
-            0x6D => {
-                self.registers.l = self.registers.l;
-                1
-            }
+            0x68 => self.load_reg_from_reg(L, B),
+            0x69 => self.load_reg_from_reg(L, C),
+            0x6A => self.load_reg_from_reg(L, D),
+            0x6B => self.load_reg_from_reg(L, E),
+            0x6C => self.load_reg_from_reg(L, H),
+            0x6D => self.load_reg_from_reg(L, L),
             0x6E => {
-                self.registers.l = mmu.read_byte(self.registers.hl());
+                self.registers[L] = mmu.read_byte(self.registers.hl());
                 2
             }
-            0x6F => {
-                self.registers.l = self.registers.a;
-                1
-            }
+            0x6F => self.load_reg_from_reg(L, A),
 
-            0x70 => {
-                mmu.write_byte(self.registers.hl(), self.registers.b);
-                2
-            }
+            0x70 => self.load_addr_from_reg(self.registers.hl(), B, mmu),
             0x71 => {
                 mmu.write_byte(self.registers.hl(), self.registers.c);
                 2
@@ -792,302 +675,121 @@ impl CPU {
                 2
             }
 
-            0x78 => {
-                self.registers.a = self.registers.b;
-                1
-            }
-            0x79 => {
-                self.registers.a = self.registers.c;
-                1
-            }
-            0x7A => {
-                self.registers.a = self.registers.d;
-                1
-            }
-            0x7B => {
-                self.registers.a = self.registers.e;
-                1
-            }
-            0x7C => {
-                self.registers.a = self.registers.h;
-                1
-            }
-            0x7D => {
-                self.registers.a = self.registers.l;
-                1
-            }
+            0x78 => self.load_reg_from_reg(A, B),
+            0x79 => self.load_reg_from_reg(A, C),
+            0x7A => self.load_reg_from_reg(A, D),
+            0x7B => self.load_reg_from_reg(A, E),
+            0x7C => self.load_reg_from_reg(A, H),
+            0x7D => self.load_reg_from_reg(A, L),
             0x7E => {
                 self.registers.a = mmu.read_byte(self.registers.hl());
                 2
             }
-            0x7F => {
-                self.registers.a = self.registers.a;
-                1
-            }
+            0x7F => self.load_reg_from_reg(A, A),
 
-            0x80 => {
-                self.add_a(self.registers.b);
-                1
-            }
-            0x81 => {
-                self.add_a(self.registers.c);
-                1
-            }
-            0x82 => {
-                self.add_a(self.registers.d);
-                1
-            }
-            0x83 => {
-                self.add_a(self.registers.e);
-                1
-            }
-            0x84 => {
-                self.add_a(self.registers.h);
-                1
-            }
-            0x85 => {
-                self.add_a(self.registers.l);
-                1
-            }
+            0x80 =>
+                self.add_a(self.registers.b),
+            0x81 => 
+                self.add_a(self.registers.c),
+            0x82 =>
+                self.add_a(self.registers.d),
+            0x83 =>
+                self.add_a(self.registers.e),
+            0x84 =>
+                self.add_a(self.registers.h),
+            0x85 =>
+                self.add_a(self.registers.l),
             0x86 => {
-                self.add_a(mmu.read_byte(self.registers.hl()));
+                let value = mmu.read_byte(self.registers.hl());
+                self.add_a(value);
                 2
             }
-            0x87 => {
-                self.add_a(self.registers.a);
-                1
-            }
+            0x87 => self.add_a(self.registers.a),
 
-            0x88 => {
-                self.add_a(self.registers.b + self.registers.carry_flag() as u8);
-                1
-            }
-            0x89 => {
-                self.add_a(self.registers.c + self.registers.carry_flag() as u8);
-                1
-            }
-            0x8A => {
-                self.add_a(self.registers.d + self.registers.carry_flag() as u8);
-                1
-            }
-            0x8B => {
-                self.add_a(self.registers.e + self.registers.carry_flag() as u8);
-                1
-            }
-            0x8C => {
-                self.add_a(self.registers.h + self.registers.carry_flag() as u8);
-                1
-            }
-            0x8D => {
-                self.add_a(self.registers.l + self.registers.carry_flag() as u8);
-                1
-            }
+            0x88 => self.add_a(self.registers.b + self.registers.carry_flag() as u8),
+            0x89 => self.add_a(self.registers.c + self.registers.carry_flag() as u8),
+            0x8A => self.add_a(self.registers.d + self.registers.carry_flag() as u8),
+            0x8B => self.add_a(self.registers.e + self.registers.carry_flag() as u8),
+            0x8C => self.add_a(self.registers.h + self.registers.carry_flag() as u8),
+            0x8D => self.add_a(self.registers.l + self.registers.carry_flag() as u8),
             0x8E => {
                 self.add_a(mmu.read_byte(self.registers.hl()) + self.registers.carry_flag() as u8);
                 2
             }
-            0x8F => {
-                self.add_a(self.registers.a + self.registers.carry_flag() as u8);
-                1
-            }
+            0x8F => self.add_a(self.registers.a + self.registers.carry_flag() as u8),
 
-            0x90 => {
-                self.sub_a(self.registers.b);
-                1
-            }
-            0x91 => {
-                self.sub_a(self.registers.c);
-                1
-            }
-            0x92 => {
-                self.sub_a(self.registers.d);
-                1
-            }
-            0x93 => {
-                self.sub_a(self.registers.e);
-                1
-            }
-            0x94 => {
-                self.sub_a(self.registers.h);
-                1
-            }
-            0x95 => {
-                self.sub_a(self.registers.l);
-                1
-            }
+            0x90 => self.sub_a(self.registers.b),
+            0x91 => self.sub_a(self.registers.c),
+            0x92 => self.sub_a(self.registers.d),
+            0x93 => self.sub_a(self.registers.e),
+            0x94 => self.sub_a(self.registers.h),
+            0x95 => self.sub_a(self.registers.l),
             0x96 => {
                 self.sub_a(mmu.read_byte(self.registers.hl()));
                 2
             }
-            0x97 => {
-                self.sub_a(self.registers.a);
-                1
-            }
+            0x97 => self.sub_a(self.registers.a),
 
-            0x98 => {
-                self.sub_a(self.registers.b + self.registers.carry_flag() as u8);
-                1
-            }
-            0x99 => {
-                self.sub_a(self.registers.c + self.registers.carry_flag() as u8);
-                1
-            }
-            0x9A => {
-                self.sub_a(self.registers.d + self.registers.carry_flag() as u8);
-                1
-            }
-            0x9B => {
-                self.sub_a(self.registers.e + self.registers.carry_flag() as u8);
-                1
-            }
-            0x9C => {
-                self.sub_a(self.registers.h + self.registers.carry_flag() as u8);
-                1
-            }
-            0x9D => {
-                self.sub_a(self.registers.l + self.registers.carry_flag() as u8);
-                1
-            }
+            0x98 => self.sub_a(self.registers.b + self.registers.carry_flag() as u8),
+            0x99 => self.sub_a(self.registers.c + self.registers.carry_flag() as u8),
+            0x9A => self.sub_a(self.registers.d + self.registers.carry_flag() as u8),
+            0x9B => self.sub_a(self.registers.e + self.registers.carry_flag() as u8),
+            0x9C => self.sub_a(self.registers.h + self.registers.carry_flag() as u8),
+            0x9D => self.sub_a(self.registers.l + self.registers.carry_flag() as u8),
             0x9E => {
                 self.sub_a(mmu.read_byte(self.registers.hl()) + self.registers.carry_flag() as u8);
                 2
             }
-            0x9F => {
-                self.sub_a(self.registers.a + self.registers.carry_flag() as u8);
-                1
-            }
+            0x9F => self.sub_a(self.registers.a + self.registers.carry_flag() as u8),
 
-            0xA0 => {
-                self.and_a(self.registers.b);
-                1
-            }
-            0xA1 => {
-                self.and_a(self.registers.c);
-                1
-            }
-            0xA2 => {
-                self.and_a(self.registers.d);
-                1
-            }
-            0xA3 => {
-                self.and_a(self.registers.e);
-                1
-            }
-            0xA4 => {
-                self.and_a(self.registers.h);
-                1
-            }
-            0xA5 => {
-                self.and_a(self.registers.l);
-                1
-            }
+            0xA0 => self.and_a(self.registers.b),
+            0xA1 => self.and_a(self.registers.c),
+            0xA2 => self.and_a(self.registers.d),
+            0xA3 => self.and_a(self.registers.e),
+            0xA4 => self.and_a(self.registers.h),
+            0xA5 => self.and_a(self.registers.l),
             0xA6 => {
                 self.and_a(mmu.read_byte(self.registers.hl()));
                 2
             }
-            0xA7 => {
-                self.and_a(self.registers.a);
-                1
-            }
+            0xA7 => self.and_a(self.registers.a),
 
-            0xA8 => {
-                self.xor_a(self.registers.b);
-                1
-            }
-            0xA9 => {
-                self.xor_a(self.registers.c);
-                1
-            }
-            0xAA => {
-                self.xor_a(self.registers.d);
-                1
-            }
-            0xAB => {
-                self.xor_a(self.registers.e);
-                1
-            }
-            0xAC => {
-                self.xor_a(self.registers.h);
-                1
-            }
-            0xAD => {
-                self.xor_a(self.registers.l);
-                1
-            }
+            0xA8 => self.xor_a(self.registers.b),
+            0xA9 => self.xor_a(self.registers.c),
+            0xAA => self.xor_a(self.registers.d),
+            0xAB => self.xor_a(self.registers.e),
+            0xAC => self.xor_a(self.registers.h),
+            0xAD => self.xor_a(self.registers.l),
             0xAE => {
                 self.xor_a(mmu.read_byte(self.registers.hl()));
                 2
             }
-            0xAF => {
-                self.xor_a(self.registers.a);
-                1
-            }
+            0xAF => self.xor_a(self.registers.a),
 
-            0xB0 => {
-                self.or_a(self.registers.b);
-                1
-            }
-            0xB1 => {
-                self.or_a(self.registers.c);
-                1
-            }
-            0xB2 => {
-                self.or_a(self.registers.d);
-                1
-            }
-            0xB3 => {
-                self.or_a(self.registers.e);
-                1
-            }
-            0xB4 => {
-                self.or_a(self.registers.h);
-                1
-            }
-            0xB5 => {
-                self.or_a(self.registers.l);
-                1
-            }
+            0xB0 => self.or_a(self.registers.b),
+            0xB1 => self.or_a(self.registers.c),
+            0xB2 => self.or_a(self.registers.d),
+            0xB3 => self.or_a(self.registers.e),
+            0xB4 => self.or_a(self.registers.h),
+            0xB5 => self.or_a(self.registers.l),
             0xB6 => {
                 self.or_a(mmu.read_byte(self.registers.hl()));
                 2
             }
-            0xB7 => {
-                self.or_a(self.registers.a);
-                1
-            }
+            0xB7 => self.or_a(self.registers.a),
 
-            0xB8 => {
-                self.cp_a(self.registers.b);
-                1
-            }
-            0xB9 => {
-                self.cp_a(self.registers.c);
-                1
-            }
-            0xBA => {
-                self.cp_a(self.registers.d);
-                1
-            }
-            0xBB => {
-                self.cp_a(self.registers.e);
-                1
-            }
-            0xBC => {
-                self.cp_a(self.registers.h);
-                1
-            }
-            0xBD => {
-                self.cp_a(self.registers.l);
-                1
-            }
+            0xB8 => self.cp_a(self.registers.b),
+            0xB9 => self.cp_a(self.registers.c),
+            0xBA => self.cp_a(self.registers.d),
+            0xBB => self.cp_a(self.registers.e),
+            0xBC => self.cp_a(self.registers.h),
+            0xBD => self.cp_a(self.registers.l),
             0xBE => {
                 self.cp_a(mmu.read_byte(self.registers.hl()));
                 2
             }
-            0xBF => {
-                self.cp_a(self.registers.a);
-                1
-            }
+            0xBF => self.cp_a(self.registers.a),
+
             0xC0 => self.ret(!self.registers.zero_flag(), mmu),
             0xC1 => {
                 let (upper, lower) = self.pop(mmu);
@@ -1098,10 +800,7 @@ impl CPU {
             0xC2 => self.jump_abs(!self.registers.zero_flag(), mmu),
             0xC3 => self.jump_abs(true, mmu),
             0xC4 => self.call(!self.registers.zero_flag(), mmu),
-            0xC5 => {
-                self.push(self.registers.bc(), mmu);
-                4
-            }
+            0xC5 => self.push(self.registers.bc(), mmu),
             0xC6 => {
                 let value = mmu.read_byte(self.pc);
                 self.pc += 1;
@@ -1137,10 +836,7 @@ impl CPU {
                 panic!("Unsupported OPCODE")
             }
             0xD4 => self.call(!self.registers.carry_flag(), mmu),
-            0xD5 => {
-                self.push(self.registers.de(), mmu);
-                4
-            }
+            0xD5 => self.push(self.registers.de(), mmu),
             0xD6 => {
                 let value = mmu.read_byte(self.pc);
                 self.pc += 1;
@@ -1192,14 +888,10 @@ impl CPU {
             0xE4 => {
                 panic!("Unsupported OPCODE")
             }
-            0xE5 => {
-                self.push(self.registers.hl(), mmu);
-                4
-            }
+            0xE5 => self.push(self.registers.hl(), mmu),
             0xE6 => {
                 let value = mmu.read_byte(self.pc);
-                self.pc += 1;
-                self.and_a(value);
+                self.pc += 1; self.and_a(value);
                 2
             }
             0xE7 => self.restart(0x20, mmu),
@@ -1259,10 +951,7 @@ impl CPU {
             0xF4 => {
                 panic!("Unsupported OPCODE")
             }
-            0xF5 => {
-                self.push(self.registers.af(), mmu);
-                4
-            }
+            0xF5 => self.push(self.registers.af(), mmu),
             0xF6 => {
                 let value = mmu.read_byte(self.pc);
                 self.pc += 1;
@@ -1307,7 +996,7 @@ impl CPU {
             }
             0xFF => self.restart(0x38, mmu),
         }
-    }
+            }
 
     fn execute_cb_opcodes(&mut self, mmu: &mut impl Memory) -> u8 {
         let opcode = mmu.read_byte(self.pc);
@@ -1949,7 +1638,7 @@ impl CPU {
                 4
             }
             0xFF => self.set(7, A),
-        }
+            }
     }
 }
 

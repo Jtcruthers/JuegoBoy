@@ -22,6 +22,8 @@ pub enum Register16 {
     BC,
     DE,
     HL,
+    SP,
+    PC
 }
 
 pub enum Flag {
@@ -42,11 +44,13 @@ pub struct Registers {
     pub l: u8,
 }
 
+use Register::*;
+use Register16::*;
+
 impl Index<Register> for Registers {
     type Output = u8;
 
     fn index(&self, register: Register) -> &Self::Output {
-        use Register::*;
         match register {
             A => &self.a,
             B => &self.b,
@@ -62,7 +66,6 @@ impl Index<Register> for Registers {
 
 impl IndexMut<Register> for Registers {
     fn index_mut(&mut self, register: Register) -> &mut Self::Output {
-        use Register::*;
         match register {
             A => &mut self.a,
             B => &mut self.b,
@@ -105,10 +108,19 @@ impl Registers {
     pub fn hl(&self) -> u16 {
         ((self.h as u16) << 8) + self.l as u16
     }
+    
+    pub fn get_reg16(&mut self, reg: Register16) -> u16 {
+        match reg {
+            AF => self.af(),
+            BC => self.bc(),
+            DE => self.de(),
+            HL => self.hl(),
+            SP => panic!("SP is not a register"),
+            PC => panic!("PC is not a register"),
+        }
+    }
 
     pub fn set_16(&mut self, register: Register16, value: u16) {
-        use Register16::*;
-
         let (upper, lower) = self.u16_to_u8s(value);
         match register {
             AF => {
@@ -127,6 +139,7 @@ impl Registers {
                 self.h = upper;
                 self.l = lower;
             }
+            _ => panic!("Invalid 16-bit register")
         }
     }
 
