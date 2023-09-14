@@ -8,6 +8,7 @@ mod mmu;
 mod ppu;
 mod registers;
 mod cartridge;
+mod mbc1;
 
 #[derive(Parser, Debug)]
 #[command(author = "Justin Carruthers", about = "Configurable CHIP-8 (and variants) emulator")]
