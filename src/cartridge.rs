@@ -14,8 +14,7 @@ pub struct Cartridge {
 
 impl Cartridge {
     pub fn new(rom: Vec<u8>) -> Cartridge {
-        let mapper_type = rom[0x147];
-        let mut cartridge = Cartridge {
+        let cartridge = Cartridge {
             mbc: Box::new(MBC1::new(rom))
         };
         

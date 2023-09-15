@@ -15,8 +15,8 @@ impl CPU {
     pub fn new() -> CPU {
         CPU {
             registers: Registers::new(),
-            sp: 0xFFFE,
-            pc: 0x0100,
+            sp: 0x0,
+            pc: 0x0,
             ime: false,
             halted: false,
         }
@@ -149,37 +149,57 @@ impl CPU {
         result
     }
 
-    fn call(&mut self, condition: bool, mmu: &mut impl Memory) -> u8 {
-        if condition {
-            let address = self.read_u16(self.pc, mmu);
-            self.push(address, mmu);
-            self.pc += 2;
+    /** Get value from the stack and increment sp */
+    fn pop(&mut self, mmu: &mut impl Memory) -> (u8, u8) {
+        let value = self.read_u16(self.sp, mmu);
+        self.sp += 2;
+        self.u16_to_u8s(value)
+    }
 
+    /** Put value onto the stack and decrement sp */
+    fn push(&mut self, value: u16, mmu: &mut impl Memory) -> u8 {
+        let (upper, lower) = self.u16_to_u8s(value);
+        self.sp -= 1;
+        mmu.write_byte(self.sp, upper);
+        self.sp -= 1;
+        mmu.write_byte(self.sp, lower);
+        4
+    }
+
+    fn call(&mut self, condition: bool, mmu: &mut impl Memory) -> u8 {
+        let address = self.read_u16(self.pc, mmu);
+        self.pc += 2;
+        if condition {
+            self.push(self.pc, mmu);
+            self.pc = address;
             6
         } else {
-            self.pc += 2;
             3
         }
     }
 
     fn jump_relative(&mut self, condition: bool, mmu: &mut impl Memory) -> u8 {
         let offset = mmu.read_byte(self.pc) as i8;
+        self.pc += 1;
         if condition {
-            self.pc = ((self.pc as i16) + offset as i16) as u16;
+            println!("jump relative offset: {:X}", offset);
+            self.pc = ((self.pc as u32 as i32) + (offset as i32)) as u16;
             3
         } else {
-            self.pc += 1;
+            println!("not jumping relative");
             2
         }
     }
 
     fn jump_abs(&mut self, condition: bool, mmu: &mut impl Memory) -> u8 {
+        let address = self.read_u16(self.pc, mmu);
+        self.pc += 2;
         if condition {
-            let address = self.read_u16(self.pc, mmu);
+            println!("jumping abs to address: {:X}", address);
             self.pc = address;
             4
         } else {
-            self.pc += 2;
+            println!("not jumping abs");
             3
         }
     }
@@ -253,7 +273,8 @@ impl CPU {
 
     fn ret(&mut self, condition: bool, mmu: &mut impl Memory) -> u8 {
         if condition {
-            self.pc = self.read_u16(self.sp, mmu);
+            let (upper, lower) = self.pop(mmu);
+            self.pc = ((upper as u16) << 8) as u16 + lower as u16;
             return 5;
         }
         2
@@ -262,23 +283,6 @@ impl CPU {
     fn restart(&mut self, address: u16, mmu: &mut impl Memory) -> u8 {
         self.push(self.pc, mmu);
         self.pc = address;
-        4
-    }
-
-    /** Get value from the stack and increment sp */
-    fn pop(&mut self, mmu: &mut impl Memory) -> (u8, u8) {
-        let value = self.read_u16(self.sp, mmu);
-        self.sp += 2;
-        self.u16_to_u8s(value)
-    }
-
-    /** Put value onto the stack and decrement sp */
-    fn push(&mut self, value: u16, mmu: &mut impl Memory) -> u8 {
-        let (upper, lower) = self.u16_to_u8s(value);
-        self.sp -= 1;
-        mmu.write_byte(self.sp, upper);
-        self.sp -= 1;
-        mmu.write_byte(self.sp, lower);
         4
     }
 
@@ -333,9 +337,6 @@ impl CPU {
     }
     
     pub fn execute(&mut self, opcode: u8, mmu: &mut impl Memory) -> u8 {
-        if opcode != 0x00 {
-            println!("Executing opcode: {:02X} from {:04X}", opcode, self.pc);
-        }
         match opcode {
             0x00 => 1,
             0x01 => self.load_reg16_from_pc(BC, mmu),
@@ -532,8 +533,8 @@ impl CPU {
             }
             0x36 => {
                 let value = mmu.read_byte(self.pc);
-                mmu.write_byte(self.registers.hl(), value);
                 self.pc += 1;
+                mmu.write_byte(self.registers.hl(), value);
                 2
             }
             0x37 => {
@@ -891,7 +892,8 @@ impl CPU {
             0xE5 => self.push(self.registers.hl(), mmu),
             0xE6 => {
                 let value = mmu.read_byte(self.pc);
-                self.pc += 1; self.and_a(value);
+                self.pc += 1;
+                self.and_a(value);
                 2
             }
             0xE7 => self.restart(0x20, mmu),
