@@ -1,11 +1,12 @@
 use std::ops::{Index, IndexMut};
+use std::fmt;
 
 const FLAG_MASK_ZERO: u8 = 0b10000000;
 const FLAG_MASK_SUBTRACT: u8 = 0b01000000;
 const FLAG_MASK_HALF_CARRY: u8 = 0b00100000;
 const FLAG_MASK_CARRY: u8 = 0b00010000;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Register {
     A,
     B,
@@ -15,6 +16,22 @@ pub enum Register {
     F,
     H,
     L,
+}
+
+impl fmt::Display for Register {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let register = match self {
+            A => "A",
+            B => "B",
+            C => "C",
+            D => "D",
+            E => "E",
+            F => "F",
+            H => "H",
+            L => "L",
+        };
+        write!(f, "{}", register)
+    }
 }
 
 pub enum Register16 {

@@ -46,7 +46,7 @@ impl MMU {
             0xFF07 => todo!("Timer"), //TODO - Timer
             0xFF0F => self.if_reg, // Interrupt Flag
             0xFF10..=0xFF3F => 0, //TODO - APU
-            0xFF40..=0xFF4B => 0, //TODO - PPU
+            0xFF40..=0xFF4B => 0x90, //TODO - PPU
             0xFF50 => self.boot_rom_reg, //TODO - Boot ROM
             _ => panic!("Invalid IO read address: {:X}", address)
         }
