@@ -17,6 +17,7 @@ pub struct MMU {
     high_ram: [u8; 0x7F],
     ie_reg: u8,
     if_reg: u8,
+    boot_rom_reg: u8,
     cartridge: Cartridge,
 }
 
@@ -28,7 +29,44 @@ impl MMU {
             high_ram: [0; 0x7F],
             ie_reg: 0,
             if_reg: 0,
+            boot_rom_reg: 0,
             cartridge
+        }
+    }
+
+    fn handle_io_read(&self, address: u16) -> u8 {
+        println!("IO read to {:X}", address);
+        match address {
+            0xFF00 => todo!("Joypad"), //TODO - Joypad
+            0xFF01 => todo!("Serial"), //TODO - Serial
+            0xFF02 => todo!("Serial"), //TODO - Serial
+            0xFF04 => todo!("Timer"), //TODO - Timer
+            0xFF05 => todo!("Timer"), //TODO - Timer
+            0xFF06 => todo!("Timer"), //TODO - Timer
+            0xFF07 => todo!("Timer"), //TODO - Timer
+            0xFF0F => self.if_reg, // Interrupt Flag
+            0xFF10..=0xFF3F => 0, //TODO - APU
+            0xFF40..=0xFF4B => 0, //TODO - PPU
+            0xFF50 => self.boot_rom_reg, //TODO - Boot ROM
+            _ => panic!("Invalid IO read address: {:X}", address)
+        }
+    }
+
+    fn handle_io_write(&mut self, address: u16, value: u8) {
+        println!("IO write to {:X}", address);
+        match address {
+            0xFF00 => todo!("Joypad"), //TODO - Joypad
+            0xFF01 => todo!("Serial"), //TODO - Serial
+            0xFF02 => todo!("Serial"), //TODO - Serial
+            0xFF04 => todo!("Timer"), //TODO - Timer
+            0xFF05 => todo!("Timer"), //TODO - Timer
+            0xFF06 => todo!("Timer"), //TODO - Timer
+            0xFF07 => todo!("Timer"), //TODO - Timer
+            0xFF0F => (), // Interrupt Flag
+            0xFF10..=0xFF3F => (), //TODO - APU
+            0xFF40..=0xFF4B => (), //TODO - PPU
+            0xFF50 => panic!("Boot rom write {}", value), //TODO - Boot ROM
+            _ => panic!("Invalid IO write address: {:X}", address)
         }
     }
 }
@@ -44,7 +82,7 @@ impl Memory for MMU {
             0xE000..=0xFDFF => self.wram[(address - 0xE000 - 0x2000) as usize], // echo RAM
             0xFE00..=0xFE9F => todo!("OAM"),        //TODO - OAM
             0xFEA0..=0xFEFF => todo!("Not Usable"), //TODO - Not usable
-            0xFF00..=0xFF7F => todo!("I/O"),        //TODO - I/O
+            0xFF00..=0xFF7F => self.handle_io_read(address),
             0xFF80..=0xFFFE => self.high_ram[(address - 0xFF80) as usize],
             0xFFFF => 0, //TODO - Interrupt enable register
         }
@@ -60,7 +98,7 @@ impl Memory for MMU {
             0xE000..=0xFDFF => self.wram[(address - 0xE000) as usize] = value, // echo ram
             0xFE00..=0xFE9F => (),                                           //TODO - OAM
             0xFEA0..=0xFEFF => (),                                           // Not usable
-            0xFF00..=0xFF7F => (),                                           //TODO - I/O
+            0xFF00..=0xFF7F => self.handle_io_write(address, value),
             0xFF80..=0xFFFE => self.high_ram[(address - 0xFF80) as usize] = value,
             0xFFFF => (), //TODO - Interrupt enable register
         }
@@ -85,13 +123,10 @@ impl Memory for TestMMU {
     }
 
     fn write_byte(&mut self, address: u16, value: u8) {
-        println!("Writing {:04X} to {:04X}", value, address);
         if (address == 0xFF01) {
-            println!("SERIAL DATA: {:04X}", value);
             panic!("Serial data");
         }
         if (address == 0xFF02) {
-            println!("SERIAL TRANSFER: {:04X}", value);
             panic!("Serial transfer");
         }
         self.memory[address as usize] = value;
