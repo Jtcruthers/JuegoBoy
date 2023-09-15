@@ -99,14 +99,14 @@ impl IndexMut<Register> for Registers {
 impl Registers {
     pub fn new() -> Self {
         Registers {
-            a: 0x01,
+            a: 0x00,
             b: 0x00,
-            c: 0x13,
+            c: 0x00,
             d: 0x00,
-            e: 0xD8,
-            f: 0xB0,
-            h: 0x01,
-            l: 0x4D,
+            e: 0x00,
+            f: 0x00,
+            h: 0x00,
+            l: 0x00,
         }
     }
 
@@ -258,15 +258,4 @@ mod tests {
         assert_eq!(regs.half_carry_flag(), false);
         assert_eq!(regs.carry_flag(), false);
     }
-
-    #[test]
-    fn test_initial_register_values() {
-        let mut regs = Registers::new();
-
-        assert_eq!(regs.af(), 0x01B0);
-        assert_eq!(regs.bc(), 0x0013);
-        assert_eq!(regs.de(), 0x00D8);
-        assert_eq!(regs.hl(), 0x014D);
-    }
-
 }
