@@ -1,10 +1,10 @@
 use crate::cartridge::MBC;
 
 pub struct MBC1 {
+    ram_enabled: bool,
     rom_bank: u8,
     ram_bank: u8,
     banking_mode: u8,
-    ram_enabled: bool,
     rom: [u8; 0x20000],
     ram: [u8; 0x8000]
 }
@@ -36,8 +36,11 @@ impl MBC for MBC1 {
     }
 
     fn read_bank_n(&self, address: u16) -> u8 {
-        let multiplier = if self.rom_bank == 0 { 1 } else { self.rom_bank };
-        self.rom[(address + (multiplier as u16 * 0x4000)) as usize]
+        let multiplier = match self.rom_bank {
+            0 => 1,
+            _ => self.rom_bank
+        } as u16;
+        self.rom[(address + multiplier * 0x4000) as usize]
     }
 
     fn read_ram(&self, address: u16) -> u8 {
@@ -50,9 +53,10 @@ impl MBC for MBC1 {
     fn write_bank_0(&mut self, address: u16, value: u8) {
       match address {
         0x0000..=0x1FFF => {
-          self.ram_enabled = (value & 0x0F) == 0x0A;
+            self.ram_enabled = (value & 0x0F) == 0x0A;
         },
         0x2000..=0x3FFF => {
+            self.rom_bank = value & 0b11111;
         },
         _ => panic!("Invalid address for bank 0")
       }
@@ -61,11 +65,12 @@ impl MBC for MBC1 {
     fn write_bank_n(&mut self, address: u16, value: u8) {
       match address {
          0x4000..=0x5FFF => {
-          self.ram_bank = value & 0b111; 
+          self.ram_bank = value & 0b11;
         },
         0x6000..=0x7FFF => {
+            self.banking_mode = value & 0b1;
         },
-        _ => panic!("Invalid address for bank 0")
+        _ => panic!("Invalid address for bank n")
       }
     }
 
