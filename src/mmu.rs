@@ -11,6 +11,8 @@ const MASK_TIMER: u8 = 0b00100;
 const MASK_SERIAL: u8 = 0b01000;
 const MASK_JOYPAD: u8 = 0b10000;
 
+const BOOT_ROM: &[u8; 256] = include_bytes!("../bootix_dmg.bin");
+
 pub struct MMU {
     wram: [u8; 0x2000],
     vram: [u8; 0x2000],
@@ -47,7 +49,7 @@ impl MMU {
             0xFF0F => self.if_reg, // Interrupt Flag
             0xFF10..=0xFF3F => 0, //TODO - APU
             0xFF40..=0xFF4B => 0x90, //TODO - PPU
-            0xFF50 => self.boot_rom_reg, //TODO - Boot ROM
+            0xFF50 => self.boot_rom_reg,
             _ => panic!("Invalid IO read address: {:X}", address)
         }
     }
@@ -65,7 +67,7 @@ impl MMU {
             0xFF0F => (), // Interrupt Flag
             0xFF10..=0xFF3F => (), //TODO - APU
             0xFF40..=0xFF4B => (), //TODO - PPU
-            0xFF50 => panic!("Boot rom write {}", value), //TODO - Boot ROM
+            0xFF50 => self.boot_rom_reg = value,
             _ => panic!("Invalid IO write address: {:X}", address)
         }
     }
@@ -74,12 +76,18 @@ impl MMU {
 impl Memory for MMU {
     fn read_byte(&self, address: u16) -> u8 {
         match address {
-            0x0000..=0x3FFF => self.cartridge.read_bank_0(address),
+            0x0000..=0x3FFF => {
+                if self.boot_rom_reg == 0 && address < 0x100 {
+                    BOOT_ROM[address as usize]
+                } else {
+                    self.cartridge.read_bank_0(address)
+                }
+            },
             0x4000..=0x7FFF => self.cartridge.read_bank_n(address),
             0x8000..=0x9FFF => self.vram[(address - 0x8000) as usize],
             0xA000..=0xBFFF => self.cartridge.read_ram(address),
             0xC000..=0xDFFF => self.wram[(address - 0xC000) as usize],
-            0xE000..=0xFDFF => self.wram[(address - 0xE000 - 0x2000) as usize], // echo RAM
+            0xE000..=0xFDFF => self.wram[(address - 0xE000) as usize], // echo RAM
             0xFE00..=0xFE9F => todo!("OAM"),        //TODO - OAM
             0xFEA0..=0xFEFF => todo!("Not Usable"), //TODO - Not usable
             0xFF00..=0xFF7F => self.handle_io_read(address),

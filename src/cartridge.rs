@@ -8,6 +8,7 @@ pub trait MBC {
     fn write_bank_n(&mut self, address: u16, value: u8);
     fn write_ram(&mut self, address: u16, value: u8);
 }
+
 pub struct Cartridge {
     mbc: Box<dyn MBC>
 }
