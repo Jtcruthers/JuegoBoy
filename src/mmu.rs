@@ -46,7 +46,7 @@ impl MMU {
             0xFF05 => todo!("Timer"), //TODO - Timer
             0xFF06 => todo!("Timer"), //TODO - Timer
             0xFF07 => todo!("Timer"), //TODO - Timer
-            0xFF0F => self.if_reg, // Interrupt Flag
+            0xFF0F => self.if_reg,
             0xFF10..=0xFF3F => 0, //TODO - APU
             0xFF40..=0xFF4B => 0x90, //TODO - PPU
             0xFF50 => self.boot_rom_reg,
@@ -64,7 +64,7 @@ impl MMU {
             0xFF05 => todo!("Timer"), //TODO - Timer
             0xFF06 => todo!("Timer"), //TODO - Timer
             0xFF07 => todo!("Timer"), //TODO - Timer
-            0xFF0F => (), // Interrupt Flag
+            0xFF0F => self.if_reg = value,
             0xFF10..=0xFF3F => (), //TODO - APU
             0xFF40..=0xFF4B => (), //TODO - PPU
             0xFF50 => self.boot_rom_reg = value,
@@ -92,7 +92,7 @@ impl Memory for MMU {
             0xFEA0..=0xFEFF => todo!("Not Usable"), //TODO - Not usable
             0xFF00..=0xFF7F => self.handle_io_read(address),
             0xFF80..=0xFFFE => self.high_ram[(address - 0xFF80) as usize],
-            0xFFFF => 0, //TODO - Interrupt enable register
+            0xFFFF => self.ie_reg
         }
     }
 
@@ -108,7 +108,7 @@ impl Memory for MMU {
             0xFEA0..=0xFEFF => (),                                           // Not usable
             0xFF00..=0xFF7F => self.handle_io_write(address, value),
             0xFF80..=0xFFFE => self.high_ram[(address - 0xFF80) as usize] = value,
-            0xFFFF => (), //TODO - Interrupt enable register
+            0xFFFF => self.ie_reg = value
         }
     }
 }
