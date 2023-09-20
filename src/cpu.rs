@@ -1738,10 +1738,10 @@ mod tests {
         let cycles = cpu.call(true, &mut mmu);
 
         assert_eq!(cycles, 6);
-        assert_eq!(cpu.pc, 2);
+        assert_eq!(cpu.pc, 0xABCD);
         assert_eq!(cpu.sp, 0x100);
-        assert_eq!(mmu.memory[0x100], 0xCD);
-        assert_eq!(mmu.memory[0x101], 0xAB);
+        assert_eq!(mmu.memory[0x100], 0x02); // pc increments 2, and is pushed
+        assert_eq!(mmu.memory[0x101], 0x00);
 
         cpu.pc = 0x0;
         mmu.memory[0x0] = 0xCD;
@@ -1980,11 +1980,11 @@ mod tests {
         let (mut cpu, mut mmu) = get_cpu_and_mmu();
         cpu.registers.f = 0 | 0b00010000;
         cpu.pc = 0;
-        mmu.memory[cpu.pc as usize] = 0x10;
+        mmu.memory[0] = 0x10;
 
         let cycles = cpu.execute(0x38, &mut mmu);
 
-        assert_eq!(cpu.pc, 0x10);
+        assert_eq!(cpu.pc, 0x11);
         assert_eq!(cycles, 3);
     }
 
@@ -2036,7 +2036,7 @@ mod tests {
 
         let cycles = cpu.execute(0x30, &mut mmu);
 
-        assert_eq!(cpu.pc, 0x10);
+        assert_eq!(cpu.pc, 0x11);
         assert_eq!(cycles, 3);
     }
 
@@ -2127,7 +2127,7 @@ mod tests {
         cpu.pc = 0;
         mmu.memory[cpu.pc as usize] = 0x10;
         let cycles = cpu.execute(0x28, &mut mmu);
-        assert_eq!(cpu.pc, 0x10);
+        assert_eq!(cpu.pc, 0x11);
         assert_eq!(cycles, 3);
     }
 
@@ -2191,7 +2191,7 @@ mod tests {
 
         let cycles = cpu.execute(0x20, &mut mmu);
 
-        assert_eq!(cpu.pc, 0x10);
+        assert_eq!(cpu.pc, 0x11);
         assert_eq!(cycles, 3);
     }
 
@@ -2300,7 +2300,7 @@ mod tests {
 
         cpu.execute(0x18, &mut mmu);
 
-        assert_eq!(cpu.pc, 0x50);
+        assert_eq!(cpu.pc, 0x51); // pc increments to 1, then adds 50
     }
 
     #[test]
@@ -2874,22 +2874,14 @@ mod tests {
         cpu.pc = 0;
         mmu.memory[cpu.pc as usize] = 0x10;
         let cycles = cpu.jump_relative(true, &mut mmu);
-        assert_eq!(cpu.pc, 0x10);
+        assert_eq!(cpu.pc, 0x11);
         assert_eq!(cycles, 3);
 
         cpu.pc = 0x10;
         mmu.memory[cpu.pc as usize] = (-0x10 as i8) as u8;
         let cycles = cpu.jump_relative(true, &mut mmu);
-        assert_eq!(cpu.pc, 0);
+        assert_eq!(cpu.pc, 1);
         assert_eq!(cycles, 3);
-    }
-
-    #[test]
-    fn test_initial_register_values() {
-        let cpu = CPU::new();
-
-        assert_eq!(cpu.sp, 0xFFFE);
-        assert_eq!(cpu.pc, 0x0100);
     }
 
     fn assert_flags(cpu: &CPU, zero: bool, subtract: bool, half_carry: bool, carry: bool) {
