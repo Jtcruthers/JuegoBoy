@@ -11,6 +11,7 @@ pub struct Timer {
   div: u8,
   div_cycles: u8,
   tima: u8,
+  tima_cycles: u64,
   tma: u8,
   tac: Frequency,
   enabled: bool
@@ -22,6 +23,7 @@ impl Timer {
         div: 0,
         div_cycles: 0,
         tima: 0,
+        tima_cycles: 0,
         tma: 0,
         tac: Frequency::Hz4096,
         enabled: true
@@ -33,6 +35,25 @@ impl Timer {
       self.div = self.div.wrapping_add(1);
     }
     self.div_cycles += self.div_cycles.wrapping_add(cycles);
+    
+    if self.enabled {
+      let max_cycles = match self.tac {
+        Frequency::Hz4096 => 1024,
+        Frequency::Hz262144 => 16,
+        Frequency::Hz65536 => 64,
+        Frequency::Hz16384 => 256,
+      };
+      
+      if self.tima_cycles > max_cycles {
+        self.tima_cycles = 0;
+        self.tima = self.tima.wrapping_add(1);
+        
+        if self.tima == 0 {
+          self.tima = self.tma;
+          // Request interrupt
+        }
+      }
+    } 
   }
 }
 
