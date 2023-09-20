@@ -1,4 +1,5 @@
 use crate::cartridge::{Cartridge, self};
+use crate::timer::Timer;
 
 pub trait Memory {
     fn read_byte(&self, address: u16) -> u8;
@@ -21,6 +22,7 @@ pub struct MMU {
     if_reg: u8,
     boot_rom_reg: u8,
     cartridge: Cartridge,
+    pub timer: Timer,
 }
 
 impl MMU {
@@ -32,7 +34,8 @@ impl MMU {
             ie_reg: 0,
             if_reg: 0,
             boot_rom_reg: 0,
-            cartridge
+            cartridge,
+            timer: Timer::new(),
         }
     }
 
@@ -42,11 +45,8 @@ impl MMU {
             0xFF00 => todo!("Joypad"), //TODO - Joypad
             0xFF01 => todo!("Serial"), //TODO - Serial
             0xFF02 => todo!("Serial"), //TODO - Serial
-            0xFF04 => todo!("Timer"), //TODO - Timer
-            0xFF05 => todo!("Timer"), //TODO - Timer
-            0xFF06 => todo!("Timer"), //TODO - Timer
-            0xFF07 => todo!("Timer"), //TODO - Timer
-            0xFF0F => self.if_reg,
+            0xFF04..=0xFF07 => self.timer.read_byte(address),
+            0xFF0F => self.if_reg, // Interrupt Flag
             0xFF10..=0xFF3F => 0, //TODO - APU
             0xFF40..=0xFF4B => 0x90, //TODO - PPU
             0xFF50 => self.boot_rom_reg,
@@ -60,10 +60,7 @@ impl MMU {
             0xFF00 => todo!("Joypad"), //TODO - Joypad
             0xFF01 => todo!("Serial"), //TODO - Serial
             0xFF02 => todo!("Serial"), //TODO - Serial
-            0xFF04 => todo!("Timer"), //TODO - Timer
-            0xFF05 => todo!("Timer"), //TODO - Timer
-            0xFF06 => todo!("Timer"), //TODO - Timer
-            0xFF07 => todo!("Timer"), //TODO - Timer
+            0xFF04..=0xFF07 => self.timer.write_byte(address, value),
             0xFF0F => self.if_reg = value,
             0xFF10..=0xFF3F => (), //TODO - APU
             0xFF40..=0xFF4B => (), //TODO - PPU

@@ -34,7 +34,7 @@ impl Timer {
     if self.div_cycles.checked_add(cycles).is_none() {
       self.div = self.div.wrapping_add(1);
     }
-    self.div_cycles += self.div_cycles.wrapping_add(cycles);
+    self.div_cycles = self.div_cycles.wrapping_add(cycles);
     
     if self.enabled {
       let max_cycles = match self.tac {

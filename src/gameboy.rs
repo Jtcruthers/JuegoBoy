@@ -25,7 +25,8 @@ impl Gameboy {
 
     pub fn run(&mut self) {
         loop {
-            self.cpu.step(&mut self.mmu);
+            let cycles = self.cpu.step(&mut self.mmu);
+            self.mmu.timer.step(cycles);
         }
     }
 }
