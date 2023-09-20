@@ -99,3 +99,29 @@ impl Memory for Timer {
     }
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  
+  #[test]
+  fn test_inc_div() {
+    let mut timer = Timer::new();
+    timer.step(1);
+    assert_eq!(timer.div, 0);
+    
+    timer.step(255);
+    assert_eq!(timer.div, 1);
+  }
+  
+  #[test]
+  fn test_inc_div_when_disabled() {
+    let mut timer = Timer::new();
+    timer.enabled = false;
+    timer.step(1);
+    assert_eq!(timer.div, 0);
+    
+    timer.step(255);
+    assert_eq!(timer.div, 1);
+  }
+}
