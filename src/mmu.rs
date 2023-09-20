@@ -23,6 +23,7 @@ pub struct MMU {
     boot_rom_reg: u8,
     cartridge: Cartridge,
     pub timer: Timer,
+    serial_output: String
 }
 
 impl MMU {
@@ -36,6 +37,7 @@ impl MMU {
             boot_rom_reg: 0,
             cartridge,
             timer: Timer::new(),
+            serial_output: String::new()
         }
     }
 
@@ -55,11 +57,16 @@ impl MMU {
     }
 
     fn handle_io_write(&mut self, address: u16, value: u8) {
-        println!("IO write to {:X}", address);
+        println!("IO write to {:X} {:X}", address, value);
         match address {
             0xFF00 => todo!("Joypad"), //TODO - Joypad
-            0xFF01 => todo!("Serial"), //TODO - Serial
-            0xFF02 => todo!("Serial"), //TODO - Serial
+            0xFF01..=0xFF02 => {
+                if value == 0x81 {
+                    println!("Serial: {}", self.serial_output);
+                } else {
+                    self.serial_output.push(value as char);
+                }
+            }
             0xFF04..=0xFF07 => self.timer.write_byte(address, value),
             0xFF0F => self.if_reg = value,
             0xFF10..=0xFF3F => (), //TODO - APU
