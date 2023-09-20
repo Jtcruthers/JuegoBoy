@@ -3,6 +3,7 @@ use clap::Parser;
 
 mod apu;
 mod cpu;
+mod timer;
 mod gameboy;
 mod mmu;
 mod ppu;
