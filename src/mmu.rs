@@ -1,4 +1,5 @@
 use crate::cartridge::Cartridge;
+use crate::joypad::Joypad;
 use crate::timer::Timer;
 
 pub trait Memory {
@@ -6,11 +7,13 @@ pub trait Memory {
     fn write_byte(&mut self, address: u16, value: u8);
 }
 
+/*
 const MASK_VBLANK: u8 = 0b00001;
 const MASK_LCD: u8 = 0b00010;
 const MASK_TIMER: u8 = 0b00100;
 const MASK_SERIAL: u8 = 0b01000;
 const MASK_JOYPAD: u8 = 0b10000;
+*/
 
 const BOOT_ROM: &[u8; 256] = include_bytes!("../bootix_dmg.bin");
 
@@ -23,8 +26,9 @@ pub struct MMU {
     if_reg: u8,
     boot_rom_reg: u8,
     cartridge: Cartridge,
+    serial_output: String,
+    joypad: Joypad,
     pub timer: Timer,
-    serial_output: String
 }
 
 impl MMU {
@@ -38,14 +42,15 @@ impl MMU {
             if_reg: 0,
             boot_rom_reg: 0,
             cartridge,
+            serial_output: String::new(),
+            joypad: Joypad::new(),
             timer: Timer::new(),
-            serial_output: String::new()
         }
     }
 
     fn handle_io_read(&self, address: u16) -> u8 {
         match address {
-            0xFF00 => todo!("Joypad"), //TODO - Joypad
+            0xFF00 => self.joypad.read_byte(address),
             0xFF01 => todo!("Serial"), //TODO - Serial
             0xFF02 => todo!("Serial"), //TODO - Serial
             0xFF04..=0xFF07 => self.timer.read_byte(address),
@@ -59,7 +64,7 @@ impl MMU {
 
     fn handle_io_write(&mut self, address: u16, value: u8) {
         match address {
-            0xFF00 => todo!("Joypad"), //TODO - Joypad
+            0xFF00 => self.joypad.write_byte(address, value),
             0xFF01..=0xFF02 => {
                 if value == 0x81 {
                     println!("Serial: {}", self.serial_output);

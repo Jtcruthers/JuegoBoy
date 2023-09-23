@@ -125,7 +125,7 @@ impl Registers {
     pub fn hl(&self) -> u16 {
         ((self.h as u16) << 8) + self.l as u16
     }
-    
+
     pub fn get_reg16(&mut self, reg: Register16) -> u16 {
         match reg {
             AF => self.af(),

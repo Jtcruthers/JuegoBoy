@@ -11,6 +11,7 @@ mod ppu;
 mod registers;
 mod cartridge;
 mod mbc1;
+mod joypad;
 
 #[derive(Parser, Debug)]
 #[command(author = "Justin Carruthers", about = "Configurable Gameboy DMG emulator")]
