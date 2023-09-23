@@ -1,3 +1,5 @@
+use log::*;
+
 use crate::cartridge::MBC;
 
 pub struct MBC1 {
@@ -20,11 +22,11 @@ impl MBC1 {
         ram: [0; 0x8000]
     };
 
-    println!("Loading rom into MBC1");
+    trace!("Loading rom into MBC1");
     for (offset, byte) in rom.iter().enumerate() {
       mbc1.rom[offset] = *byte;
     }
-    println!("Done loading rom into MBC1");
+    debug!("Done loading rom into MBC1");
 
      mbc1
   }

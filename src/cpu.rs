@@ -1,3 +1,5 @@
+use log::*;
+
 use crate::mmu::Memory;
 use crate::registers::{Register, Register::*, Register16, Register16::*};
 use crate::registers::Registers;
@@ -75,13 +77,13 @@ impl CPU {
 
     fn sla(&mut self, reg: Register) -> u8 {
         let carry_bit = (self.registers[reg] & 0b10000000) >> 7;
-        self.registers[reg] = (self.registers[reg] << 1);
+        self.registers[reg] = self.registers[reg] << 1;
         self.registers.set_flags(false, false, false, carry_bit > 0);
         2
     }
 
     fn sra(&mut self, reg: Register) -> u8 {
-        let msb = (self.registers[reg] & 0b10000000);
+        let msb = self.registers[reg] & 0b10000000;
         let carry_bit = self.registers[reg] & 1;
         self.registers[reg] = (self.registers[reg] >> 1) + msb;
         self.registers.set_flags(false, false, false, carry_bit > 0);
@@ -182,11 +184,11 @@ impl CPU {
         let offset = mmu.read_byte(self.pc) as i8;
         self.pc += 1;
         if condition {
-            println!("jump relative offset: {:X}", offset);
+            debug!("jump relative offset: {:X}", offset);
             self.pc = ((self.pc as u32 as i32) + (offset as i32)) as u16;
             3
         } else {
-            println!("not jumping relative");
+            debug!("not jumping relative");
             2
         }
     }
@@ -195,11 +197,11 @@ impl CPU {
         let address = self.read_u16(self.pc, mmu);
         self.pc += 2;
         if condition {
-            println!("jumping abs to address: {:X}", address);
+            debug!("jumping abs to address: {:X}", address);
             self.pc = address;
             4
         } else {
-            println!("not jumping abs");
+            debug!("not jumping abs");
             3
         }
     }
@@ -295,12 +297,12 @@ impl CPU {
         self.registers[to] = self.registers[from];
         1
     }
-    
+
     fn load_addr_from_reg(&mut self, addr: u16, reg: Register, mmu: &mut impl Memory) -> u8 {
         mmu.write_byte(addr, self.registers[reg]);
         2
     }
-    
+
     fn load_reg16_from_pc(&mut self, reg: Register16, mmu: &mut impl Memory) -> u8 {
         let value = self.read_u16(self.pc, mmu);
         self.pc += 2;
@@ -313,17 +315,17 @@ impl CPU {
         }
         3
     }
-    
+
     fn inc_reg(&mut self, reg: Register) -> u8 {
         self.registers[reg] = self.inc_u8_and_set_flags(self.registers[reg]);
         1
     }
-    
+
     fn dec_reg(&mut self, reg: Register) -> u8 {
         self.registers[reg] = self.dec_u8_and_set_flags(self.registers[reg]);
         1
     }
-    
+
     fn inc_reg16(&mut self, reg: Register16) -> u8 {
         let value = match reg {
             SP => self.sp,
@@ -335,7 +337,7 @@ impl CPU {
         self.registers[C] = lower;
         2
     }
-    
+
     pub fn execute(&mut self, opcode: u8, mmu: &mut impl Memory) -> u8 {
         match opcode {
             0x00 => 1,

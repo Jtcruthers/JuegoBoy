@@ -1,4 +1,4 @@
-use crate::cartridge::{Cartridge, self};
+use crate::cartridge::Cartridge;
 use crate::timer::Timer;
 
 pub trait Memory {
@@ -135,10 +135,10 @@ impl Memory for TestMMU {
     }
 
     fn write_byte(&mut self, address: u16, value: u8) {
-        if (address == 0xFF01) {
+        if address == 0xFF01 {
             panic!("Serial data");
         }
-        if (address == 0xFF02) {
+        if address == 0xFF02 {
             panic!("Serial transfer");
         }
         self.memory[address as usize] = value;
