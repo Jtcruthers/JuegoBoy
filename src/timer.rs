@@ -8,7 +8,7 @@ enum Frequency {
 }
 
 pub struct Timer {
-  div: u8,
+  div: u16,
   div_cycles: u8,
   tima: u8,
   tima_cycles: u64,
@@ -43,11 +43,11 @@ impl Timer {
         Frequency::Hz65536 => 64,
         Frequency::Hz16384 => 256,
       };
-      
-      if self.tima_cycles > max_cycles {
-        self.tima_cycles = 0;
+
+    if self.tima_cycles > max_cycles {
+        self.tima_cycles -= max_cycles;
         self.tima = self.tima.wrapping_add(1);
-        
+
         if self.tima == 0 {
           self.tima = self.tma;
           // Request interrupt
@@ -60,7 +60,7 @@ impl Timer {
 impl Memory for Timer {
   fn read_byte(&self, address: u16) -> u8 {
     match address {
-      0xFF04 => self.div,
+      0xFF04 => ((self.div >> 8) & 0xFF) as u8,
       0xFF05 => self.tima,
       0xFF06 => self.tma,
       0xFF07 => {
@@ -81,7 +81,7 @@ impl Memory for Timer {
   
   fn write_byte(&mut self, address: u16, value: u8) {
     match address {
-      0xFF04 => self.div = 0,
+      0xFF04 => self.div &= 0x00FF,
       0xFF05 => (),
       0xFF06 => (),
       0xFF07 => {
