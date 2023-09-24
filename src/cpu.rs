@@ -4,6 +4,8 @@ use crate::mmu::Memory;
 use crate::registers::{Register, Register::*, Register16, Register16::*};
 use crate::registers::Registers;
 
+const IF_FLAG: u16 = 0xFF0F;
+const IE_FLAG: u16 = 0xFFFF;
 
 pub struct CPU {
     registers: Registers,
@@ -31,10 +33,33 @@ impl CPU {
     }
 
     pub fn step(&mut self, mmu: &mut impl Memory) -> u8 {
+        debug!("PC: {:04X}", self.pc);
+        let interrupts_pending = mmu.read_byte(IF_FLAG) & mmu.read_byte(IE_FLAG);
+
         if self.halted {
-            return 1
+            debug!("Halted");
+            if interrupts_pending == 0 {
+                return 1; // Should this be 2? Or 0?
+            }
+
+            if self.ime {
+                self.halted = false;
+                return self.interrupt_service_routine(mmu);
+            } else {
+                self.halted = false;
+                // This is when the halt bug occurs. Interrupt is pending, but IME is false.
+            }
         }
+
+        if interrupts_pending > 0 && self.ime {
+            debug!("Handling Interrupts: 0b{:08b}", interrupts_pending);
+            self.interrupt_service_routine(mmu);
+        } else {
+            debug!("Not handling interrupts");
+        }
+
         let opcode = self.fetch(mmu);
+        debug!("Fetched opcode: {:02X}", opcode);
         let cycles = self.execute(opcode, mmu);
 
         cycles
@@ -223,6 +248,7 @@ impl CPU {
     }
 
     fn halt(&mut self) {
+        debug!("halted");
         self.halted = true;
     }
 
@@ -289,8 +315,48 @@ impl CPU {
     }
 
     fn interrupt_service_routine(&mut self, mmu: &mut impl Memory) -> u8 {
+        if !self.ime {
+            debug!("interrupt service routine called but ime is false");
+            return 0
+        }
+        let if_reg = mmu.read_byte(IF_FLAG);
+        let ie_reg = mmu.read_byte(IE_FLAG);
+        let interrupt = if_reg & ie_reg;
+        if interrupt == 0 {
+            debug!("interrupt service routine called but no interrupts are enabled");
+            return 0
+        }
+
+        self.ime = false;
         self.push(self.pc, mmu);
-        0
+        debug!("interrupt service routine called with interrupt: {:X}", interrupt);
+
+        if interrupt & 0b1 != 0 {
+            debug!("vblank interrupt");
+            mmu.write_byte(IF_FLAG, if_reg & 0b11111110);
+            self.pc = 0x40;
+            return 4
+        }
+
+        if interrupt & 0b10 != 0 {
+            mmu.write_byte(IF_FLAG, if_reg & 0b11111101);
+            self.pc = 0x48;
+            return 4
+        } 
+
+        if interrupt & 0b100 != 0 {
+            mmu.write_byte(IF_FLAG, if_reg & 0b11111011);
+            self.pc = 0x50;
+            return 4
+        }
+
+        if interrupt & 0b10000 != 0 {
+            mmu.write_byte(IF_FLAG, if_reg & 0b11101111);
+            self.pc = 0x60;
+            return 4
+        }
+
+        return 0
     }
 
     fn load_reg_from_reg(&mut self, to: Register, from: Register) -> u8 {
@@ -871,6 +937,7 @@ impl CPU {
             0xE0 => {
                 let address = 0xFF00 + mmu.read_byte(self.pc) as u16;
                 self.pc += 1;
+                debug!("Writing {} to 0x{:4X}", self.registers.a, address);
                 mmu.write_byte(address, self.registers.a);
                 3
             }
