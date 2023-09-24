@@ -1,4 +1,5 @@
 use crate::cartridge::Cartridge;
+use crate::ppu::PPU;
 use crate::joypad::Joypad;
 use crate::timer::Timer;
 
@@ -28,6 +29,7 @@ pub struct MMU {
     cartridge: Cartridge,
     serial_output: String,
     joypad: Joypad,
+    pub ppu: PPU,
     pub timer: Timer,
 }
 
@@ -44,6 +46,7 @@ impl MMU {
             cartridge,
             serial_output: String::new(),
             joypad: Joypad::new(),
+            ppu: PPU::new(),
             timer: Timer::new(),
         }
     }
@@ -78,6 +81,26 @@ impl MMU {
             0xFF40..=0xFF4B => (), //TODO - PPU
             0xFF50 => self.boot_rom_reg = value,
             _ => panic!("Invalid IO write address: {:X}", address)
+        }
+    }
+
+    pub fn step(&mut self, cycles: u8) {
+        self.ppu.step(cycles);
+        if self.ppu.interrupt_vblank {
+            self.if_reg |= 0b1;
+        }
+        if self.ppu.interrupt_stat {
+            self.if_reg |= 0b10;
+        }
+
+        self.timer.step(cycles);
+        if self.timer.interrupt {
+            self.if_reg |= 0b100;
+        }
+
+        self.joypad.step();
+        if self.joypad.interrupt {
+            self.if_reg |= 0b10000;
         }
     }
 }

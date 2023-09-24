@@ -14,7 +14,8 @@ pub struct Timer {
   tima_cycles: u64,
   tma: u8,
   tac: Frequency,
-  enabled: bool
+  enabled: bool,
+  pub interrupt: bool
 }
 
 impl Timer {
@@ -26,7 +27,8 @@ impl Timer {
         tima_cycles: 0,
         tma: 0,
         tac: Frequency::Hz4096,
-        enabled: true
+        enabled: true,
+        interrupt: false
       }
   } 
   
@@ -50,7 +52,7 @@ impl Timer {
 
         if self.tima == 0 {
           self.tima = self.tma;
-          // Request interrupt
+          self.interrupt = true;
         }
       }
     } 

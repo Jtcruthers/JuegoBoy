@@ -24,4 +24,8 @@ impl Joypad {
             _ => panic!("Invalid joypad write address: {:X}", address)
         }
     }
+
+    pub fn step(&mut self) {
+        //self.interrupt = true;
+    }
 }
