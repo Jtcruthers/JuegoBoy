@@ -18,10 +18,10 @@ impl Cartridge {
         let cartridge = Cartridge {
             mbc: Box::new(MBC1::new(rom))
         };
-        
+
         cartridge
     }
-    
+
     pub fn read_bank_0(&self, address: u16) -> u8 {
         self.mbc.read_bank_0(address)
     }

@@ -39,8 +39,8 @@ impl MBC for MBC1 {
 
     fn read_bank_n(&self, address: u16) -> u8 {
         let multiplier = match self.rom_bank {
-            0 => 1,
-            _ => self.rom_bank
+            0 => 0,
+            _ => self.rom_bank - 1
         } as u16;
         self.rom[(address + multiplier * 0x4000) as usize]
     }
@@ -80,5 +80,65 @@ impl MBC for MBC1 {
       if self.ram_enabled {
         self.ram[(address - 0xA000) as usize] = value;
       }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_reading_rom_bank_nn() {
+        let mut rom = vec![0; 0x9000];
+        rom[0x8000] = 0xFF; // 8000 is first byte of rom bank 02
+
+        let mut mbc1 = MBC1::new(rom);
+
+        mbc1.rom_bank = 1;
+        assert_eq!(mbc1.read_bank_n(0x4000), 0x00);
+        mbc1.rom_bank = 2;
+        assert_eq!(mbc1.read_bank_n(0x4000), 0xFF);
+        mbc1.rom_bank = 3;
+        assert_eq!(mbc1.read_bank_n(0x4000), 0x00);
+    }
+
+    #[test]
+    fn test_setting_ram_enable() {
+        let mut mbc1 = MBC1::new(vec![0; 0x1]);
+        mbc1.ram_enabled = false;
+        mbc1.write_bank_0(0x0000, 0xA);
+        assert_eq!(mbc1.ram_enabled, true);
+        mbc1.write_bank_0(0x1FFF, 0);
+        assert_eq!(mbc1.ram_enabled, false);
+    }
+
+    #[test]
+    fn test_setting_rom_bank() {
+        let mut mbc1 = MBC1::new(vec![0; 0x1]);
+        mbc1.rom_bank = 0;
+        mbc1.write_bank_0(0x2000, 10);
+        assert_eq!(mbc1.rom_bank, 10);
+        mbc1.write_bank_0(0x3FFF, 5);
+        assert_eq!(mbc1.rom_bank, 5);
+    }
+
+    #[test]
+    fn test_setting_ram_bank() {
+        let mut mbc1 = MBC1::new(vec![0; 0x1]);
+        mbc1.ram_bank = 0;
+        mbc1.write_bank_n(0x4000, 3);
+        assert_eq!(mbc1.ram_bank, 3);
+        mbc1.write_bank_n(0x5FFF, 1);
+        assert_eq!(mbc1.ram_bank, 1);
+    }
+
+    #[test]
+    fn test_setting_banking_mode() {
+        let mut mbc1 = MBC1::new(vec![0; 0x1]);
+        mbc1.banking_mode = 0;
+        mbc1.write_bank_n(0x6000, 1);
+        assert_eq!(mbc1.banking_mode, 1);
+        mbc1.write_bank_n(0x7FFF, 0);
+        assert_eq!(mbc1.banking_mode, 0);
     }
 }
