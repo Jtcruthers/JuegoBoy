@@ -1,3 +1,5 @@
+use log::*;
+
 use crate::cartridge::Cartridge;
 use crate::ppu::PPU;
 use crate::joypad::Joypad;
@@ -59,28 +61,29 @@ impl MMU {
             0xFF04..=0xFF07 => self.timer.read_byte(address),
             0xFF0F => self.if_reg, // Interrupt Flag
             0xFF10..=0xFF3F => 0, //TODO - APU
-            0xFF40..=0xFF4B => 0x90, //TODO - PPU
+            0xFF40..=0xFF4B => self.ppu.read_byte(address),
             0xFF50 => self.boot_rom_reg,
-            _ => panic!("Invalid IO read address: {:X}", address)
+            _ => 0xFF,
         }
     }
 
     fn handle_io_write(&mut self, address: u16, value: u8) {
         match address {
             0xFF00 => self.joypad.write_byte(address, value),
-            0xFF01..=0xFF02 => {
+            0xFF01 => {
+                self.serial_output.push(value as char);
+            }
+            0xFF02 => {
                 if value == 0x81 {
                     println!("Serial: {}", self.serial_output);
-                } else {
-                    self.serial_output.push(value as char);
                 }
             }
             0xFF04..=0xFF07 => self.timer.write_byte(address, value),
             0xFF0F => self.if_reg = value,
             0xFF10..=0xFF3F => (), //TODO - APU
-            0xFF40..=0xFF4B => (), //TODO - PPU
+            0xFF40..=0xFF4B => self.ppu.write_byte(address, value),
             0xFF50 => self.boot_rom_reg = value,
-            _ => panic!("Invalid IO write address: {:X}", address)
+            _ => ()
         }
     }
 
@@ -129,6 +132,7 @@ impl Memory for MMU {
     }
 
     fn write_byte(&mut self, address: u16, value: u8) {
+        debug!("Writing to {:04X} = {:02X}", address, value);
         match address {
             0x0000..=0x3FFF => self.cartridge.write_bank_0(address, value),
             0x4000..=0x7FFF => self.cartridge.write_bank_n(address, value),
