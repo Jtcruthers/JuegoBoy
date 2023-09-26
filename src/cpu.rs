@@ -33,7 +33,7 @@ impl CPU {
     }
 
     pub fn step(&mut self, mmu: &mut impl Memory) -> u8 {
-        debug!("PC: {:04X}", self.pc);
+        debug!("\n\n");
         let interrupts_pending = mmu.read_byte(IF_FLAG) & mmu.read_byte(IE_FLAG);
 
         if self.halted {
@@ -52,15 +52,17 @@ impl CPU {
         }
 
         if interrupts_pending > 0 && self.ime {
-            debug!("Handling Interrupts: 0b{:08b}", interrupts_pending);
+            trace!("Handling Interrupts: 0b{:08b}", interrupts_pending);
             self.interrupt_service_routine(mmu);
         } else {
-            debug!("Not handling interrupts");
+            trace!("Not handling interrupts");
         }
 
         let opcode = self.fetch(mmu);
-        debug!("Fetched opcode: {:02X}", opcode);
+        debug!("PC: {:04X} OP: {:02X}", self.pc - 1, opcode);
+        debug!("BEFORE A: {:02X} B: {:02X} HL: {:04X}", self.registers[A], self.registers[B], self.registers.hl());
         let cycles = self.execute(opcode, mmu);
+        debug!("AFTER A: {:02X} B: {:02X} HL: {:04X}", self.registers[A], self.registers[B], self.registers.hl());
 
         cycles
     }
@@ -902,7 +904,7 @@ impl CPU {
             }
             0xD2 => self.jump_abs(!self.registers.carry_flag(), mmu),
             0xD3 => {
-                panic!("Unsupported OPCODE")
+                panic!("Unsupported OPCODE 0xD3")
             }
             0xD4 => self.call(!self.registers.carry_flag(), mmu),
             0xD5 => self.push(self.registers.de(), mmu),
@@ -921,11 +923,11 @@ impl CPU {
             }
             0xDA => self.jump_abs(self.registers.carry_flag(), mmu),
             0xDB => {
-                panic!("Unsupported OPCODE")
+                panic!("Unsupported OPCODE 0xDB")
             }
             0xDC => self.call(self.registers.carry_flag(), mmu),
             0xDD => {
-                panic!("Unsupported OPCODE")
+                panic!("Unsupported OPCODE 0xDD")
             }
             0xDE => {
                 let value = mmu.read_byte(self.pc) + self.registers.carry_flag() as u8;
@@ -953,10 +955,10 @@ impl CPU {
                 2
             }
             0xE3 => {
-                panic!("Unsupported OPCODE")
+                panic!("Unsupported OPCODE 0xE3")
             }
             0xE4 => {
-                panic!("Unsupported OPCODE")
+                panic!("Unsupported OPCODE 0xE4")
             }
             0xE5 => self.push(self.registers.hl(), mmu),
             0xE6 => {
@@ -983,13 +985,13 @@ impl CPU {
                 4
             }
             0xEB => {
-                panic!("Unsupported OPCODE")
+                panic!("Unsupported OPCODE 0xEB")
             }
             0xEC => {
-                panic!("Unsupported OPCODE")
+                panic!("Unsupported OPCODE 0xEC")
             }
             0xED => {
-                panic!("Unsupported OPCODE")
+                panic!("Unsupported OPCODE 0xED")
             }
             0xEE => {
                 let value = mmu.read_byte(self.pc);
@@ -1000,6 +1002,7 @@ impl CPU {
             0xEF => self.restart(0x28, mmu),
             0xF0 => {
                 let address = 0xFF00 + mmu.read_byte(self.pc) as u16;
+                debug!("Reading from 0x{:4X}", address);
                 self.pc += 1;
                 self.registers.a = mmu.read_byte(address);
                 3
@@ -1020,7 +1023,7 @@ impl CPU {
                 1
             }
             0xF4 => {
-                panic!("Unsupported OPCODE")
+                panic!("Unsupported OPCODE 0xF4")
             }
             0xF5 => self.push(self.registers.af(), mmu),
             0xF6 => {
@@ -1054,14 +1057,15 @@ impl CPU {
                 1
             }
             0xFC => {
-                panic!("Unsupported OPCODE")
+                panic!("Unsupported OPCODE 0xFC")
             }
             0xFD => {
-                panic!("Unsupported OPCODE")
+                panic!("Unsupported OPCODE 0xFD")
             }
             0xFE => {
                 let value = mmu.read_byte(self.pc);
                 self.pc += 1;
+                debug!("Comparing A {} to {}", self.registers.a, value);
                 self.cp_a(value);
                 2
             }
