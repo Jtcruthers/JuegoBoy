@@ -87,6 +87,10 @@ impl MMU {
         }
     }
 
+    pub fn boot_rom_active(&self) -> bool {
+        self.boot_rom_reg == 0
+    }
+
     pub fn step(&mut self, cycles: u8) {
         self.ppu.step(cycles);
         if self.ppu.interrupt_vblank {

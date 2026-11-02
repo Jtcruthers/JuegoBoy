@@ -1,3 +1,5 @@
+use std::fmt;
+
 use log::*;
 
 use crate::mmu::Memory;
@@ -13,6 +15,24 @@ pub struct CPU {
     pc: u16,
     ime: bool,
     halted: bool
+}
+
+impl fmt::Display for CPU {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let r = &self.registers;
+        write!(
+            f,
+            "A: {:02X} F: {:02X} B: {:02X} C: {:02X} D: {:02X} E: {:02X} H: {:02X} L: {:02X}\n\
+             SP: {:04X} PC: {:04X} Flags: {}{}{}{} IME: {} Halted: {}",
+            r.a, r.f, r.b, r.c, r.d, r.e, r.h, r.l,
+            self.sp, self.pc,
+            if r.zero_flag() { 'Z' } else { '-' },
+            if r.subtract_flag() { 'N' } else { '-' },
+            if r.half_carry_flag() { 'H' } else { '-' },
+            if r.carry_flag() { 'C' } else { '-' },
+            self.ime, self.halted,
+        )
+    }
 }
 
 impl CPU {

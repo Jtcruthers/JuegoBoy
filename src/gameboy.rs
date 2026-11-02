@@ -1,5 +1,7 @@
+use log::*;
+
 use crate::cpu::CPU;
-use crate::mmu::MMU;
+use crate::mmu::{Memory, MMU};
 use crate::cartridge::Cartridge;
 
 pub struct Gameboy {
@@ -18,9 +20,21 @@ impl Gameboy {
     }
 
     pub fn run(&mut self) {
+        let mut booting = self.mmu.boot_rom_active();
         loop {
             let cycles = self.cpu.step(&mut self.mmu);
             self.mmu.step(cycles);
+
+            if booting && !self.mmu.boot_rom_active() {
+                booting = false;
+                info!(
+                    "Boot ROM finished\n{}\nIE: {:08b} IF: {:08b} LY: {:02X}",
+                    self.cpu,
+                    self.mmu.read_byte(0xFFFF),
+                    self.mmu.read_byte(0xFF0F),
+                    self.mmu.read_byte(0xFF44),
+                );
+            }
         }
     }
 }

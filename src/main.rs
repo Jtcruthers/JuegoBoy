@@ -1,27 +1,31 @@
-use std::fs;
 use clap::Parser;
 use env_logger;
+use std::fs;
 
 mod apu;
+mod cartridge;
 mod cpu;
-mod timer;
 mod gameboy;
+mod joypad;
+mod mbc1;
 mod mmu;
 mod ppu;
 mod registers;
-mod cartridge;
-mod mbc1;
-mod joypad;
+mod timer;
 
 #[derive(Parser, Debug)]
-#[command(author = "Justin Carruthers", about = "Configurable Gameboy DMG emulator")]
+#[command(
+    author = "Justin Carruthers",
+    about = "Configurable Gameboy DMG emulator"
+)]
 struct Args {
     rom_name: String,
 }
 
 fn main() {
     env_logger::builder()
-        .filter_level(log::LevelFilter::Debug)
+        .filter_level(log::LevelFilter::Info)
+        .parse_default_env()
         .format_target(false)
         .format_timestamp(None)
         .init();
