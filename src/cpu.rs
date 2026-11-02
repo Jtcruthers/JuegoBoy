@@ -136,8 +136,8 @@ impl CPU {
 
     fn rr(&mut self, reg: Register) -> u8 {
         let carry_bit = self.registers[reg] & 1;
-        self.registers[reg] = (self.registers[reg] >> 1) + (self.registers.carry_flag() as u8);
-        self.registers.set_flags(false, false, false, carry_bit > 0);
+        self.registers[reg] = (self.registers[reg] >> 1) + ((self.registers.carry_flag() as u8) << 7);
+        self.registers.set_flags(self.registers[reg] == 0, false, false, carry_bit > 0);
         2
     }
 
@@ -1048,7 +1048,7 @@ impl CPU {
             0xF1 => {
                 let (upper, lower) = self.pop(mmu);
                 self.registers.a = upper;
-                self.registers.f = lower;
+                self.registers.f = lower & 0b11110000;
                 3
             }
             0xF2 => {
@@ -1256,11 +1256,11 @@ impl CPU {
                 let carry_bit = old_value & 1;
                 let value = (old_value >> 1) + ((self.registers.carry_flag() as u8) << 7);
                 mmu.write_byte(self.registers.hl(), value);
-                self.registers.set_flags(false, false, false, carry_bit > 0);
+                self.registers.set_flags(value == 0, false, false, carry_bit > 0);
                 4
             }
             0x1F => {
-                self.rrc(A);
+                self.rr(A);
                 2
             }
 
@@ -1820,6 +1820,61 @@ mod tests {
         cpu.sra(A);
         assert_eq!(cpu.registers[A], 0b11100010);
         assert_eq!(cpu.registers.carry_flag(), true);
+    }
+
+    #[test]
+    fn test_rr() {
+        let mut cpu = CPU::new();
+
+        // old carry goes into bit 7, bit 0 goes into carry
+        cpu.registers.set_flags(false, false, false, true);
+        cpu.registers[B] = 0b00000010;
+        cpu.rr(B);
+        assert_eq!(cpu.registers[B], 0b10000001);
+        assert_eq!(cpu.registers.carry_flag(), false);
+        assert_eq!(cpu.registers.zero_flag(), false);
+
+        cpu.rr(B);
+        assert_eq!(cpu.registers[B], 0b01000000);
+        assert_eq!(cpu.registers.carry_flag(), true);
+
+        // zero result sets Z, even when a bit is shifted out into carry
+        cpu.registers.set_flags(false, false, false, false);
+        cpu.registers[B] = 0b00000001;
+        cpu.rr(B);
+        assert_eq!(cpu.registers[B], 0);
+        assert_eq!(cpu.registers.zero_flag(), true);
+        assert_eq!(cpu.registers.carry_flag(), true);
+    }
+
+    #[test]
+    fn test_cb_0x1f_rr_rotate_a_right_carry() {
+        let (mut cpu, mut mmu) = get_cpu_and_mmu();
+
+        mmu.memory[0x0] = 0x1F;
+        cpu.registers.f = 0b00010000;
+        cpu.registers.a = 0b00000000;
+
+        cpu.execute(0xCB, &mut mmu);
+
+        assert_eq!(cpu.registers.a, 0b10000000);
+        assert_flags(&cpu, false, false, false, false);
+    }
+
+    #[test]
+    fn test_cb_0x1e_rr_rotate_hl_ptr_right_carry() {
+        let (mut cpu, mut mmu) = get_cpu_and_mmu();
+
+        mmu.memory[0x0] = 0x1E;
+        mmu.memory[0xC000] = 0b00000001;
+        cpu.registers.h = 0xC0;
+        cpu.registers.l = 0x00;
+        cpu.registers.f = 0b00000000;
+
+        cpu.execute(0xCB, &mut mmu);
+
+        assert_eq!(mmu.memory[0xC000], 0b00000000);
+        assert_flags(&cpu, true, false, false, true);
     }
 
     #[test]
