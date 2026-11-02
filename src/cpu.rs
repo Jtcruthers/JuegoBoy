@@ -3,8 +3,8 @@ use std::fmt;
 use log::*;
 
 use crate::mmu::Memory;
-use crate::registers::{Register, Register::*, Register16, Register16::*};
 use crate::registers::Registers;
+use crate::registers::{Register, Register::*, Register16, Register16::*};
 
 const IF_FLAG: u16 = 0xFF0F;
 const IE_FLAG: u16 = 0xFFFF;
@@ -14,7 +14,7 @@ pub struct CPU {
     sp: u16,
     pc: u16,
     ime: bool,
-    halted: bool
+    halted: bool,
 }
 
 impl fmt::Display for CPU {
@@ -24,13 +24,22 @@ impl fmt::Display for CPU {
             f,
             "A: {:02X} F: {:02X} B: {:02X} C: {:02X} D: {:02X} E: {:02X} H: {:02X} L: {:02X}\n\
              SP: {:04X} PC: {:04X} Flags: {}{}{}{} IME: {} Halted: {}",
-            r.a, r.f, r.b, r.c, r.d, r.e, r.h, r.l,
-            self.sp, self.pc,
+            r.a,
+            r.f,
+            r.b,
+            r.c,
+            r.d,
+            r.e,
+            r.h,
+            r.l,
+            self.sp,
+            self.pc,
             if r.zero_flag() { 'Z' } else { '-' },
             if r.subtract_flag() { 'N' } else { '-' },
             if r.half_carry_flag() { 'H' } else { '-' },
             if r.carry_flag() { 'C' } else { '-' },
-            self.ime, self.halted,
+            self.ime,
+            self.halted,
         )
     }
 }
@@ -80,9 +89,19 @@ impl CPU {
 
         let opcode = self.fetch(mmu);
         debug!("PC: {:04X} OP: {:02X}", self.pc - 1, opcode);
-        debug!("BEFORE A: {:02X} B: {:02X} HL: {:04X}", self.registers[A], self.registers[B], self.registers.hl());
+        debug!(
+            "BEFORE A: {:02X} B: {:02X} HL: {:04X}",
+            self.registers[A],
+            self.registers[B],
+            self.registers.hl()
+        );
         let cycles = self.execute(opcode, mmu);
-        debug!("AFTER A: {:02X} B: {:02X} HL: {:04X}", self.registers[A], self.registers[B], self.registers.hl());
+        debug!(
+            "AFTER A: {:02X} B: {:02X} HL: {:04X}",
+            self.registers[A],
+            self.registers[B],
+            self.registers.hl()
+        );
 
         cycles
     }
@@ -146,7 +165,8 @@ impl CPU {
 
     fn bit(&mut self, bit: u8, reg: Register) -> u8 {
         let bit_is_set = self.registers[reg] & (1 << bit) > 0;
-        self.registers.set_flags(bit_is_set, false, true, self.registers.carry_flag());
+        self.registers
+            .set_flags(bit_is_set, false, true, self.registers.carry_flag());
         2
     }
 
@@ -163,8 +183,10 @@ impl CPU {
     }
 
     fn swap(&mut self, reg: Register) {
-        self.registers[reg] = ((self.registers[reg] & 0x0F) << 4) + ((self.registers[reg] & 0xF0) >> 4);
-        self.registers.set_flags(self.registers[reg] > 0, false, false, false);
+        self.registers[reg] =
+            ((self.registers[reg] & 0x0F) << 4) + ((self.registers[reg] & 0xF0) >> 4);
+        self.registers
+            .set_flags(self.registers[reg] > 0, false, false, false);
     }
 
     fn read_u16(&mut self, address: u16, mmu: &mut impl Memory) -> u16 {
@@ -288,7 +310,8 @@ impl CPU {
         let old_a = self.registers.a;
         let new_a = self.registers.a.wrapping_sub(value);
         let half_carry = (old_a & 0x0F) < (value & 0x0F);
-        self.registers.set_flags(new_a == 0, true, half_carry, new_a > old_a);
+        self.registers
+            .set_flags(new_a == 0, true, half_carry, new_a > old_a);
         self.registers.a = new_a;
         1
     }
@@ -339,46 +362,49 @@ impl CPU {
     fn interrupt_service_routine(&mut self, mmu: &mut impl Memory) -> u8 {
         if !self.ime {
             debug!("interrupt service routine called but ime is false");
-            return 0
+            return 0;
         }
         let if_reg = mmu.read_byte(IF_FLAG);
         let ie_reg = mmu.read_byte(IE_FLAG);
         let interrupt = if_reg & ie_reg;
         if interrupt == 0 {
             debug!("interrupt service routine called but no interrupts are enabled");
-            return 0
+            return 0;
         }
 
         self.ime = false;
         self.push(self.pc, mmu);
-        debug!("interrupt service routine called with interrupt: {:X}", interrupt);
+        debug!(
+            "interrupt service routine called with interrupt: {:X}",
+            interrupt
+        );
 
         if interrupt & 0b1 != 0 {
             debug!("vblank interrupt");
             mmu.write_byte(IF_FLAG, if_reg & 0b11111110);
             self.pc = 0x40;
-            return 4
+            return 4;
         }
 
         if interrupt & 0b10 != 0 {
             mmu.write_byte(IF_FLAG, if_reg & 0b11111101);
             self.pc = 0x48;
-            return 4
-        } 
+            return 4;
+        }
 
         if interrupt & 0b100 != 0 {
             mmu.write_byte(IF_FLAG, if_reg & 0b11111011);
             self.pc = 0x50;
-            return 4
+            return 4;
         }
 
         if interrupt & 0b10000 != 0 {
             mmu.write_byte(IF_FLAG, if_reg & 0b11101111);
             self.pc = 0x60;
-            return 4
+            return 4;
         }
 
-        return 0
+        return 0;
     }
 
     fn load_reg_from_reg(&mut self, to: Register, from: Register) -> u8 {
@@ -399,7 +425,7 @@ impl CPU {
             DE => self.registers.set_16(DE, value),
             HL => self.registers.set_16(HL, value),
             SP => self.sp = value,
-            _ => panic!("Invalid 16-bit register")
+            _ => panic!("Invalid 16-bit register"),
         }
         3
     }
@@ -418,7 +444,7 @@ impl CPU {
         let value = match reg {
             SP => self.sp,
             PC => self.pc,
-            _ => self.registers.get_reg16(reg)
+            _ => self.registers.get_reg16(reg),
         };
         let (upper, lower) = self.u16_to_u8s(value.wrapping_add(1));
         self.registers[B] = upper;
@@ -776,18 +802,12 @@ impl CPU {
             }
             0x7F => self.load_reg_from_reg(A, A),
 
-            0x80 =>
-                self.add_a(self.registers.b),
-            0x81 => 
-                self.add_a(self.registers.c),
-            0x82 =>
-                self.add_a(self.registers.d),
-            0x83 =>
-                self.add_a(self.registers.e),
-            0x84 =>
-                self.add_a(self.registers.h),
-            0x85 =>
-                self.add_a(self.registers.l),
+            0x80 => self.add_a(self.registers.b),
+            0x81 => self.add_a(self.registers.c),
+            0x82 => self.add_a(self.registers.d),
+            0x83 => self.add_a(self.registers.e),
+            0x84 => self.add_a(self.registers.h),
+            0x85 => self.add_a(self.registers.l),
             0x86 => {
                 let value = mmu.read_byte(self.registers.hl());
                 self.add_a(value);
@@ -1089,7 +1109,7 @@ impl CPU {
             }
             0xFF => self.restart(0x38, mmu),
         }
-            }
+    }
 
     fn execute_cb_opcodes(&mut self, mmu: &mut impl Memory) -> u8 {
         let opcode = mmu.read_byte(self.pc);
@@ -1731,7 +1751,7 @@ impl CPU {
                 4
             }
             0xFF => self.set(7, A),
-            }
+        }
     }
 }
 

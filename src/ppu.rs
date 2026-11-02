@@ -37,13 +37,13 @@ impl PPU {
             0xFF45 => 0, // LYC
             0xFF4A => 0, // WY
             0xFF4B => 0, // WX
-            _ => panic!("Invalid PPU read address: {:X}", address)
+            _ => panic!("Invalid PPU read address: {:X}", address),
         }
     }
 
     pub fn write_byte(&mut self, address: u16, value: u8) {
         match address {
-            _ => ()
+            _ => (),
         }
     }
 }

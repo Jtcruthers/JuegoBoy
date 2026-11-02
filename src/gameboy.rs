@@ -1,8 +1,8 @@
 use log::*;
 
+use crate::cartridge::Cartridge;
 use crate::cpu::CPU;
 use crate::mmu::{Memory, MMU};
-use crate::cartridge::Cartridge;
 
 pub struct Gameboy {
     cpu: CPU,
@@ -13,9 +13,7 @@ impl Gameboy {
     pub fn new(rom: Vec<u8>) -> Self {
         Gameboy {
             cpu: CPU::new(),
-            mmu: MMU::new(
-                Cartridge::new(rom)
-            ),
+            mmu: MMU::new(Cartridge::new(rom)),
         }
     }
 

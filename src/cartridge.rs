@@ -10,13 +10,13 @@ pub trait MBC {
 }
 
 pub struct Cartridge {
-    mbc: Box<dyn MBC>
+    mbc: Box<dyn MBC>,
 }
 
 impl Cartridge {
     pub fn new(rom: Vec<u8>) -> Cartridge {
         let cartridge = Cartridge {
-            mbc: Box::new(MBC1::new(rom))
+            mbc: Box::new(MBC1::new(rom)),
         };
 
         cartridge

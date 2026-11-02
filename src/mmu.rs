@@ -1,8 +1,8 @@
 use log::*;
 
 use crate::cartridge::Cartridge;
-use crate::ppu::PPU;
 use crate::joypad::Joypad;
+use crate::ppu::PPU;
 use crate::timer::Timer;
 
 pub trait Memory {
@@ -60,7 +60,7 @@ impl MMU {
             0xFF02 => todo!("Serial"), //TODO - Serial
             0xFF04..=0xFF07 => self.timer.read_byte(address),
             0xFF0F => self.if_reg, // Interrupt Flag
-            0xFF10..=0xFF3F => 0, //TODO - APU
+            0xFF10..=0xFF3F => 0,  //TODO - APU
             0xFF40..=0xFF4B => self.ppu.read_byte(address),
             0xFF50 => self.boot_rom_reg,
             _ => 0xFF,
@@ -83,7 +83,7 @@ impl MMU {
             0xFF10..=0xFF3F => (), //TODO - APU
             0xFF40..=0xFF4B => self.ppu.write_byte(address, value),
             0xFF50 => self.boot_rom_reg = value,
-            _ => ()
+            _ => (),
         }
     }
 
@@ -121,7 +121,7 @@ impl Memory for MMU {
                 } else {
                     self.cartridge.read_bank_0(address)
                 }
-            },
+            }
             0x4000..=0x7FFF => self.cartridge.read_bank_n(address),
             0x8000..=0x9FFF => self.vram[(address - 0x8000) as usize],
             0xA000..=0xBFFF => self.cartridge.read_ram(address),
@@ -131,7 +131,7 @@ impl Memory for MMU {
             0xFEA0..=0xFEFF => todo!("Not Usable {0:4X}", address), //TODO - Not usable
             0xFF00..=0xFF7F => self.handle_io_read(address),
             0xFF80..=0xFFFE => self.high_ram[(address - 0xFF80) as usize],
-            0xFFFF => self.ie_reg
+            0xFFFF => self.ie_reg,
         }
     }
 
@@ -140,15 +140,15 @@ impl Memory for MMU {
         match address {
             0x0000..=0x3FFF => self.cartridge.write_bank_0(address, value),
             0x4000..=0x7FFF => self.cartridge.write_bank_n(address, value),
-            0x8000..=0x9FFF => self.vram[(address -0x8000) as usize] = value,
+            0x8000..=0x9FFF => self.vram[(address - 0x8000) as usize] = value,
             0xA000..=0xBFFF => self.cartridge.write_ram(address, value),
             0xC000..=0xDFFF => self.wram[(address - 0xC000) as usize] = value,
             0xE000..=0xFDFF => self.wram[(address - 0xE000) as usize] = value, // echo ram
             0xFE00..=0xFE9F => self.oam[(address - 0xFE00) as usize] = value,
-            0xFEA0..=0xFEFF => (),                                           // Not usable
+            0xFEA0..=0xFEFF => (), // Not usable
             0xFF00..=0xFF7F => self.handle_io_write(address, value),
             0xFF80..=0xFFFE => self.high_ram[(address - 0xFF80) as usize] = value,
-            0xFFFF => self.ie_reg = value
+            0xFFFF => self.ie_reg = value,
         }
     }
 }

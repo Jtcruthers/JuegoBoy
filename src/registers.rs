@@ -1,5 +1,5 @@
-use std::ops::{Index, IndexMut};
 use std::fmt;
+use std::ops::{Index, IndexMut};
 
 const FLAG_MASK_ZERO: u8 = 0b10000000;
 const FLAG_MASK_SUBTRACT: u8 = 0b01000000;
@@ -40,7 +40,7 @@ pub enum Register16 {
     DE,
     HL,
     SP,
-    PC
+    PC,
 }
 
 pub enum Flag {
@@ -156,7 +156,7 @@ impl Registers {
                 self.h = upper;
                 self.l = lower;
             }
-            _ => panic!("Invalid 16-bit register")
+            _ => panic!("Invalid 16-bit register"),
         }
     }
 
