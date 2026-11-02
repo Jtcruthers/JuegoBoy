@@ -137,7 +137,7 @@ impl Memory for MMU {
     }
 
     fn write_byte(&mut self, address: u16, value: u8) {
-        debug!("Writing to {:04X} = {:02X}", address, value);
+        trace!("Writing to {:04X} = {:02X}", address, value);
         match address {
             0x0000..=0x3FFF => self.cartridge.write_bank_0(address, value),
             0x4000..=0x7FFF => self.cartridge.write_bank_n(address, value),

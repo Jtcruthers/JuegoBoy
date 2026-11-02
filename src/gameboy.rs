@@ -25,7 +25,7 @@ impl Gameboy {
 
             if booting && !self.mmu.boot_rom_active() {
                 booting = false;
-                info!(
+                debug!(
                     "Boot ROM finished\n{}\nIE: {:08b} IF: {:08b} LY: {:02X}",
                     self.cpu,
                     self.mmu.read_byte(0xFFFF),

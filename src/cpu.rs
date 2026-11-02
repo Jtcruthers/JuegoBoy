@@ -62,7 +62,7 @@ impl CPU {
     }
 
     pub fn step(&mut self, mmu: &mut impl Memory) -> u8 {
-        debug!("\n\n");
+        trace!("\n\n");
         let interrupts_pending = mmu.read_byte(IF_FLAG) & mmu.read_byte(IE_FLAG);
 
         if self.halted {
@@ -88,15 +88,15 @@ impl CPU {
         }
 
         let opcode = self.fetch(mmu);
-        debug!("PC: {:04X} OP: {:02X}", self.pc - 1, opcode);
-        debug!(
+        trace!("PC: {:04X} OP: {:02X}", self.pc - 1, opcode);
+        trace!(
             "BEFORE A: {:02X} B: {:02X} HL: {:04X}",
             self.registers[A],
             self.registers[B],
             self.registers.hl()
         );
         let cycles = self.execute(opcode, mmu);
-        debug!(
+        trace!(
             "AFTER A: {:02X} B: {:02X} HL: {:04X}",
             self.registers[A],
             self.registers[B],
@@ -136,8 +136,10 @@ impl CPU {
 
     fn rr(&mut self, reg: Register) -> u8 {
         let carry_bit = self.registers[reg] & 1;
-        self.registers[reg] = (self.registers[reg] >> 1) + ((self.registers.carry_flag() as u8) << 7);
-        self.registers.set_flags(self.registers[reg] == 0, false, false, carry_bit > 0);
+        self.registers[reg] =
+            (self.registers[reg] >> 1) + ((self.registers.carry_flag() as u8) << 7);
+        self.registers
+            .set_flags(self.registers[reg] == 0, false, false, carry_bit > 0);
         2
     }
 
@@ -253,11 +255,11 @@ impl CPU {
         let offset = mmu.read_byte(self.pc) as i8;
         self.pc += 1;
         if condition {
-            debug!("jump relative offset: {:X}", offset);
+            trace!("jump relative offset: {:X}", offset);
             self.pc = ((self.pc as u32 as i32) + (offset as i32)) as u16;
             3
         } else {
-            debug!("not jumping relative");
+            trace!("not jumping relative");
             2
         }
     }
@@ -266,11 +268,11 @@ impl CPU {
         let address = self.read_u16(self.pc, mmu);
         self.pc += 2;
         if condition {
-            debug!("jumping abs to address: {:X}", address);
+            trace!("jumping abs to address: {:X}", address);
             self.pc = address;
             4
         } else {
-            debug!("not jumping abs");
+            trace!("not jumping abs");
             3
         }
     }
@@ -361,26 +363,26 @@ impl CPU {
 
     fn interrupt_service_routine(&mut self, mmu: &mut impl Memory) -> u8 {
         if !self.ime {
-            debug!("interrupt service routine called but ime is false");
+            trace!("interrupt service routine called but ime is false");
             return 0;
         }
         let if_reg = mmu.read_byte(IF_FLAG);
         let ie_reg = mmu.read_byte(IE_FLAG);
         let interrupt = if_reg & ie_reg;
         if interrupt == 0 {
-            debug!("interrupt service routine called but no interrupts are enabled");
+            trace!("interrupt service routine called but no interrupts are enabled");
             return 0;
         }
 
         self.ime = false;
         self.push(self.pc, mmu);
-        debug!(
+        trace!(
             "interrupt service routine called with interrupt: {:X}",
             interrupt
         );
 
         if interrupt & 0b1 != 0 {
-            debug!("vblank interrupt");
+            trace!("vblank interrupt");
             mmu.write_byte(IF_FLAG, if_reg & 0b11111110);
             self.pc = 0x40;
             return 4;
@@ -977,7 +979,7 @@ impl CPU {
             0xE0 => {
                 let address = 0xFF00 + mmu.read_byte(self.pc) as u16;
                 self.pc += 1;
-                debug!("Writing {} to 0x{:4X}", self.registers.a, address);
+                trace!("Writing {} to 0x{:4X}", self.registers.a, address);
                 mmu.write_byte(address, self.registers.a);
                 3
             }
@@ -1040,7 +1042,7 @@ impl CPU {
             0xEF => self.restart(0x28, mmu),
             0xF0 => {
                 let address = 0xFF00 + mmu.read_byte(self.pc) as u16;
-                debug!("Reading from 0x{:4X}", address);
+                trace!("Reading from 0x{:4X}", address);
                 self.pc += 1;
                 self.registers.a = mmu.read_byte(address);
                 3
@@ -1103,7 +1105,7 @@ impl CPU {
             0xFE => {
                 let value = mmu.read_byte(self.pc);
                 self.pc += 1;
-                debug!("Comparing A {} to {}", self.registers.a, value);
+                trace!("Comparing A {} to {}", self.registers.a, value);
                 self.cp_a(value);
                 2
             }
@@ -1256,7 +1258,8 @@ impl CPU {
                 let carry_bit = old_value & 1;
                 let value = (old_value >> 1) + ((self.registers.carry_flag() as u8) << 7);
                 mmu.write_byte(self.registers.hl(), value);
-                self.registers.set_flags(value == 0, false, false, carry_bit > 0);
+                self.registers
+                    .set_flags(value == 0, false, false, carry_bit > 0);
                 4
             }
             0x1F => {
