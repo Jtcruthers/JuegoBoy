@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use log::*;
 
 use crate::cartridge::Cartridge;
@@ -29,7 +31,7 @@ pub struct MMU {
     if_reg: u8,
     boot_rom_reg: u8,
     cartridge: Cartridge,
-    serial_output: String,
+    serial_output: u8,
     joypad: Joypad,
     pub ppu: PPU,
     pub timer: Timer,
@@ -46,7 +48,7 @@ impl MMU {
             if_reg: 0,
             boot_rom_reg: 0,
             cartridge,
-            serial_output: String::new(),
+            serial_output: 0,
             joypad: Joypad::new(),
             ppu: PPU::new(),
             timer: Timer::new(),
@@ -70,12 +72,11 @@ impl MMU {
     fn handle_io_write(&mut self, address: u16, value: u8) {
         match address {
             0xFF00 => self.joypad.write_byte(address, value),
-            0xFF01 => {
-                self.serial_output.push(value as char);
-            }
+            0xFF01 => self.serial_output = value,
             0xFF02 => {
                 if value == 0x81 {
-                    println!("Serial: {}", self.serial_output);
+                    print!("{}", self.serial_output as char);
+                    std::io::stdout().flush().unwrap();
                 }
             }
             0xFF04..=0xFF07 => self.timer.write_byte(address, value),
