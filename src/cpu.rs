@@ -674,13 +674,11 @@ impl CPU {
             }
             0x47 => self.load_reg_from_reg(B, A),
 
-            0x48 => self.load_reg_from_reg(C, A),
-            0x49 => self.load_reg_from_reg(C, B),
+            0x48 => self.load_reg_from_reg(C, B),
+            0x49 => self.load_reg_from_reg(C, C),
             0x4A => self.load_reg_from_reg(C, D),
             0x4B => self.load_reg_from_reg(C, E),
-            0x4C => {
-                self.load_reg_from_reg(C, F)
-            },
+            0x4C => self.load_reg_from_reg(C, H),
             0x4D => self.load_reg_from_reg(C, L),
             0x4E => {
                 self.registers[C] = mmu.read_byte(self.registers.hl());
