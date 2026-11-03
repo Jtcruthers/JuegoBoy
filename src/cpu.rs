@@ -1047,9 +1047,14 @@ impl CPU {
             }
             0xE7 => self.restart(0x20, mmu),
             0xE8 => {
-                let offset = mmu.read_byte(self.pc) as i16;
+                // Offset is signed 8-bit. Read it as signed, then expand it to 16 bit
+                let offset = mmu.read_byte(self.pc) as i8 as i16;
+                let old_sp = self.sp;
                 self.pc += 1;
-                self.sp = (self.sp as i16 + offset as i16) as u16;
+                self.sp = self.sp.wrapping_add(offset as u16);
+                let half_carry = (old_sp & 0x0F) + (offset as u16 & 0x0F) > 0x0F;
+                let carry = (old_sp & 0xFF) + (offset as u16 & 0xFF) > 0xFF;
+                self.registers.set_flags(false, false, half_carry, carry);
                 4
             }
             0xE9 => {
@@ -1112,12 +1117,17 @@ impl CPU {
             }
             0xF7 => self.restart(0x30, mmu),
             0xF8 => {
-                let offset = mmu.read_byte(self.pc) as i16;
+                let offset = mmu.read_byte(self.pc) as i8 as i16;
+                let old_sp = self.sp;
                 self.pc += 1;
-                let value = (self.sp as i16 + offset) as u16;
+                let value = self.sp.wrapping_add(offset as u16);
                 let (upper, lower) = self.u16_to_u8s(value);
+
+                let half_carry = (old_sp & 0x0F) + (offset as u16 & 0x0F) > 0x0F;
+                let carry = (old_sp & 0xFF) + (offset as u16 & 0xFF) > 0xFF;
                 self.registers.h = upper;
                 self.registers.l = lower;
+                self.registers.set_flags(false, false, half_carry, carry);
                 3
             }
             0xF9 => {
