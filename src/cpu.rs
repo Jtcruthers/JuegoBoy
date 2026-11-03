@@ -475,6 +475,36 @@ impl CPU {
         1
     }
 
+    fn daa(&mut self) -> u8 {
+        let mut adjustment = 0;
+        if self.registers.subtract_flag() {
+            if self.registers.half_carry_flag() {
+                adjustment += 0x06;
+            }
+            if self.registers.carry_flag() {
+                adjustment += 0x60;
+            }
+            self.registers[A] = self.registers[A].wrapping_sub(adjustment)
+        } else {
+            if self.registers.half_carry_flag() || (self.registers[A] & 0xF) > 0x09 {
+                adjustment += 0x06;
+            }
+            if self.registers.carry_flag() || self.registers[A] > 0x99 {
+                adjustment += 0x60;
+            }
+            self.registers[A] = self.registers[A].wrapping_add(adjustment)
+        }
+
+        let carry = self.registers.carry_flag() || adjustment >= 0x60;
+        self.registers.set_flags(
+            self.registers[A] == 0,
+            self.registers.subtract_flag(),
+            false,
+            carry,
+        );
+        1
+    }
+
     fn inc_reg16(&mut self, reg: Register16) -> u8 {
         let value = match reg {
             SP => self.sp,
@@ -627,10 +657,7 @@ impl CPU {
                 self.pc += 1;
                 2
             }
-            0x27 => {
-                todo!(); // DAA
-                         // 4 cycles
-            }
+            0x27 => self.daa(),
             0x28 => self.jump_relative(self.registers.zero_flag(), mmu),
             0x29 => self.add_u16_to_hl(self.registers.hl()),
             0x2A => {
@@ -1117,6 +1144,7 @@ impl CPU {
             }
             0xF7 => self.restart(0x30, mmu),
             0xF8 => {
+                // Offset is signed 8-bit. Read it as signed, then expand it to 16 bit
                 let offset = mmu.read_byte(self.pc) as i8 as i16;
                 let old_sp = self.sp;
                 self.pc += 1;
@@ -2130,6 +2158,126 @@ mod tests {
     }
 
     #[test]
+    fn test_daa_add() {
+        let mut cpu = CPU::new();
+
+        // no carry, zero -> zero
+        cpu.registers[A] = 0x00;
+        cpu.registers.set_flags(false, false, false, false);
+
+        cpu.daa();
+
+        assert_eq!(cpu.registers[A], 0x00);
+        assert_flags(&cpu, true, false, false, false);
+
+        // no carry -> same result
+        cpu.registers[A] = 0x77;
+        cpu.registers.set_flags(false, false, false, false);
+        cpu.daa();
+
+        assert_eq!(cpu.registers[A], 0x77);
+        assert_flags(&cpu, false, false, false, false);
+
+        // no carry, lower bit too high
+        cpu.registers[A] = 0x0A;
+        cpu.registers.set_flags(false, false, false, false);
+        cpu.daa();
+
+        assert_eq!(cpu.registers[A], 0x10);
+        assert_flags(&cpu, false, false, false, false);
+
+        // no carry, both too high
+        cpu.registers[A] = 0x9A;
+        cpu.registers.set_flags(false, false, false, false);
+        cpu.daa();
+
+        assert_eq!(cpu.registers[A], 0x00);
+        assert_flags(&cpu, true, false, false, true);
+
+        // half carry
+        cpu.registers[A] = 0x02;
+        cpu.registers.set_flags(true, false, true, false);
+        cpu.daa();
+
+        assert_eq!(cpu.registers[A], 0x08);
+        assert_flags(&cpu, false, false, false, false);
+
+        // carry
+        cpu.registers[A] = 0x90;
+        cpu.registers.set_flags(false, false, false, true);
+        cpu.daa();
+
+        assert_eq!(cpu.registers[A], 0xF0);
+        assert_flags(&cpu, false, false, false, true);
+
+        // carry, valid BCD
+        cpu.registers[A] = 0xF0;
+        cpu.registers.set_flags(false, false, false, true);
+        cpu.daa();
+
+        assert_eq!(cpu.registers[A], 0x50);
+        assert_flags(&cpu, false, false, false, true);
+
+        // carry and half carry
+        cpu.registers[A] = 0xFA;
+        cpu.registers.set_flags(true, false, true, true);
+        cpu.daa();
+
+        assert_eq!(cpu.registers[A], 0x60);
+        assert_flags(&cpu, false, false, false, true);
+    }
+
+    #[test]
+    fn test_daa_sub() {
+        let mut cpu = CPU::new();
+
+        // no carry -> same result
+        cpu.registers[A] = 0x77;
+        cpu.registers.set_flags(false, true, false, false);
+
+        cpu.daa();
+
+        assert_eq!(cpu.registers[A], 0x77);
+        assert_flags(&cpu, false, true, false, false);
+
+        // no carry, zero -> zero
+        cpu.registers[A] = 0x00;
+        cpu.registers.set_flags(true, true, false, false);
+
+        cpu.daa();
+
+        assert_eq!(cpu.registers[A], 0x00);
+        assert_flags(&cpu, true, true, false, false);
+
+        // half carry
+        cpu.registers[A] = 0x05;
+        cpu.registers.set_flags(true, true, true, false);
+
+        cpu.daa();
+
+        assert_eq!(cpu.registers[A], 0xFF);
+        assert_flags(&cpu, false, true, false, false);
+
+        // carry
+        cpu.registers[A] = 0x95;
+        cpu.registers.set_flags(true, true, false, true);
+
+        cpu.daa();
+
+        assert_eq!(cpu.registers[A], 0x35);
+        assert_flags(&cpu, false, true, false, true);
+
+        // half carry and carry
+        cpu.registers[A] = 0x70;
+        cpu.registers.set_flags(true, true, true, true);
+
+        cpu.daa();
+
+        assert_eq!(cpu.registers[A], 0x0A);
+        assert_flags(&cpu, false, true, false, true);
+    }
+
+    #[test]
     fn test_cp_a() {
         let mut cpu = CPU::new();
 
@@ -2346,11 +2494,6 @@ mod tests {
         let cycles = cpu.execute(0x28, &mut mmu);
         assert_eq!(cpu.pc, 0x11);
         assert_eq!(cycles, 3);
-    }
-
-    #[test]
-    fn test_0x27_daa_decimal_adjust_acc() {
-        //TODO
     }
 
     #[test]
