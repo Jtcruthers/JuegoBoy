@@ -308,12 +308,42 @@ impl CPU {
         1
     }
 
+    fn add_carry_a(&mut self, value: u8) -> u8 {
+        let old_a = self.registers.a;
+        let new_a = self
+            .registers
+            .a
+            .wrapping_add(value)
+            .wrapping_add(self.registers.carry_flag() as u8);
+        let half_carry = (old_a & 0x0F) + (value & 0x0F) + self.registers.carry_flag() as u8 > 0x0F;
+        let carry = (old_a as u16) + (value as u16) + self.registers.carry_flag() as u16 > 0xFF;
+        self.registers
+            .set_flags(new_a == 0, false, half_carry, carry);
+        self.registers.a = new_a;
+        2
+    }
+
     fn sub_a(&mut self, value: u8) -> u8 {
         let old_a = self.registers.a;
         let new_a = self.registers.a.wrapping_sub(value);
         let half_carry = (old_a & 0x0F) < (value & 0x0F);
         self.registers
             .set_flags(new_a == 0, true, half_carry, new_a > old_a);
+        self.registers.a = new_a;
+        1
+    }
+
+    fn sub_carry_a(&mut self, value: u8) -> u8 {
+        let old_a = self.registers.a;
+        let new_a = self
+            .registers
+            .a
+            .wrapping_sub(value)
+            .wrapping_sub(self.registers.carry_flag() as u8);
+        let half_carry = (old_a & 0x0F) < (value & 0x0F) + self.registers.carry_flag() as u8;
+        let carry = value as u16 + self.registers.carry_flag() as u16 > old_a as u16;
+        self.registers
+            .set_flags(new_a == 0, true, half_carry, carry);
         self.registers.a = new_a;
         1
     }
@@ -929,9 +959,9 @@ impl CPU {
             0xCC => self.call(self.registers.zero_flag(), mmu),
             0xCD => self.call(true, mmu),
             0xCE => {
-                let value = mmu.read_byte(self.pc) + self.registers.carry_flag() as u8;
+                let value = mmu.read_byte(self.pc);
                 self.pc += 1;
-                self.add_a(value);
+                self.add_carry_a(value);
                 2
             }
             0xCF => self.restart(0x08, mmu),
@@ -970,9 +1000,9 @@ impl CPU {
                 panic!("Unsupported OPCODE 0xDD")
             }
             0xDE => {
-                let value = mmu.read_byte(self.pc) + self.registers.carry_flag() as u8;
+                let value = mmu.read_byte(self.pc);
                 self.pc += 1;
-                self.sub_a(value);
+                self.sub_carry_a(value);
                 2
             }
             0xDF => self.restart(0x18, mmu),
@@ -2990,6 +3020,39 @@ mod tests {
         cpu.execute(0x02, &mut mmu);
 
         assert_eq!(mmu.read_byte(0x1234), 0xFF);
+    }
+
+    #[test]
+    fn test_0xce_adc_a_n8() {
+        let mut cpu = CPU::new();
+
+        cpu.registers.a = 1;
+        cpu.registers.set_flags(true, true, true, true);
+        cpu.add_carry_a(2);
+        assert_eq!(cpu.registers.a, 4);
+        assert_eq!(cpu.registers.half_carry_flag(), false);
+        assert_eq!(cpu.registers.carry_flag(), false);
+
+        cpu.registers.a = 1;
+        cpu.registers.set_flags(true, true, true, false);
+        cpu.add_carry_a(2);
+        assert_eq!(cpu.registers.a, 3);
+        assert_eq!(cpu.registers.half_carry_flag(), false);
+        assert_eq!(cpu.registers.carry_flag(), false);
+
+        cpu.registers.a = 1;
+        cpu.registers.set_flags(true, true, true, true);
+        cpu.add_carry_a(0b0000_1111);
+        assert_eq!(cpu.registers.a, 0b0001_0001);
+        assert_eq!(cpu.registers.half_carry_flag(), true);
+        assert_eq!(cpu.registers.carry_flag(), false);
+
+        cpu.registers.a = 0;
+        cpu.registers.set_flags(true, true, true, true);
+        cpu.add_carry_a(0b1111_1111);
+        assert_eq!(cpu.registers.a, 0b0000_0000);
+        assert_eq!(cpu.registers.half_carry_flag(), true);
+        assert_eq!(cpu.registers.carry_flag(), true);
     }
 
     #[test]
