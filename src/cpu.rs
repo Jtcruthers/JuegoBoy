@@ -174,7 +174,7 @@ impl CPU {
     fn bit(&mut self, bit: u8, reg: Register) -> u8 {
         let bit_is_set = self.registers[reg] & (1 << bit) > 0;
         self.registers
-            .set_flags(bit_is_set, false, true, self.registers.carry_flag());
+            .set_flags(!bit_is_set, false, true, self.registers.carry_flag());
         2
     }
 
