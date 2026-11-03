@@ -116,21 +116,24 @@ impl CPU {
     fn rlc(&mut self, reg: Register) -> u8 {
         let carry_bit = (self.registers[reg] & 0b10000000) >> 7;
         self.registers[reg] = (self.registers[reg] << 1) + carry_bit;
-        self.registers.set_flags(false, false, false, carry_bit > 0);
+        self.registers
+            .set_flags(self.registers[reg] == 0, false, false, carry_bit > 0);
         2
     }
 
     fn rrc(&mut self, reg: Register) -> u8 {
         let carry_bit = self.registers[reg] & 1;
         self.registers[reg] = (self.registers[reg] >> 1) + (carry_bit << 7);
-        self.registers.set_flags(false, false, false, carry_bit > 0);
+        self.registers
+            .set_flags(self.registers[reg] == 0, false, false, carry_bit > 0);
         2
     }
 
     fn rl(&mut self, reg: Register) -> u8 {
         let carry_bit = (self.registers[reg] & 0b10000000) >> 7;
         self.registers[reg] = (self.registers[reg] << 1) + (self.registers.carry_flag() as u8);
-        self.registers.set_flags(false, false, false, carry_bit > 0);
+        self.registers
+            .set_flags(self.registers[reg] == 0, false, false, carry_bit > 0);
         2
     }
 
@@ -146,7 +149,8 @@ impl CPU {
     fn sla(&mut self, reg: Register) -> u8 {
         let carry_bit = (self.registers[reg] & 0b10000000) >> 7;
         self.registers[reg] = self.registers[reg] << 1;
-        self.registers.set_flags(false, false, false, carry_bit > 0);
+        self.registers
+            .set_flags(self.registers[reg] == 0, false, false, carry_bit > 0);
         2
     }
 
@@ -154,14 +158,16 @@ impl CPU {
         let msb = self.registers[reg] & 0b10000000;
         let carry_bit = self.registers[reg] & 1;
         self.registers[reg] = (self.registers[reg] >> 1) + msb;
-        self.registers.set_flags(false, false, false, carry_bit > 0);
+        self.registers
+            .set_flags(self.registers[reg] == 0, false, false, carry_bit > 0);
         2
     }
 
     fn srl(&mut self, reg: Register) -> u8 {
         let carry_bit = self.registers[reg] & 1;
         self.registers[reg] = self.registers[reg] >> 1;
-        self.registers.set_flags(false, false, false, carry_bit > 0);
+        self.registers
+            .set_flags(self.registers[reg] == 0, false, false, carry_bit > 0);
         2
     }
 
@@ -188,7 +194,7 @@ impl CPU {
         self.registers[reg] =
             ((self.registers[reg] & 0x0F) << 4) + ((self.registers[reg] & 0xF0) >> 4);
         self.registers
-            .set_flags(self.registers[reg] > 0, false, false, false);
+            .set_flags(self.registers[reg] == 0, false, false, false);
     }
 
     fn read_u16(&mut self, address: u16, mmu: &mut impl Memory) -> u16 {
@@ -203,7 +209,7 @@ impl CPU {
 
         let z = result == 0;
         let n = false;
-        let h = result < value;
+        let h = (value & 0x0F) + 1 > 0x0F;
         let c = self.registers.carry_flag();
         self.registers.set_flags(z, n, h, c);
 
@@ -215,7 +221,7 @@ impl CPU {
 
         let z = result == 0;
         let n = true;
-        let h = result > value;
+        let h = (value & 0x0F) < (result & 0x0F);
         let c = self.registers.carry_flag();
         self.registers.set_flags(z, n, h, c);
 
@@ -317,7 +323,7 @@ impl CPU {
         self.registers
             .set_flags(new_a == 0, false, half_carry, carry);
         self.registers.a = new_a;
-        2
+        1
     }
 
     fn sub_a(&mut self, value: u8) -> u8 {
@@ -504,6 +510,9 @@ impl CPU {
             }
             0x07 => {
                 self.rlc(A);
+                // always set z to 0, unlike typical rlc
+                self.registers
+                    .set_flags(false, false, false, self.registers.carry_flag());
                 1
             }
             0x08 => {
@@ -536,6 +545,9 @@ impl CPU {
             }
             0x0F => {
                 self.rrc(A);
+                // always set z to 0, unlike typical rrc
+                self.registers
+                    .set_flags(false, false, false, self.registers.carry_flag());
                 1
             }
             0x10 => {
@@ -844,18 +856,17 @@ impl CPU {
             }
             0x87 => self.add_a(self.registers.a),
 
-            0x88 => self.add_a(self.registers.b + self.registers.carry_flag() as u8),
-            0x89 => self.add_a(self.registers.c + self.registers.carry_flag() as u8),
-            0x8A => self.add_a(self.registers.d + self.registers.carry_flag() as u8),
-            0x8B => self.add_a(self.registers.e + self.registers.carry_flag() as u8),
-            0x8C => self.add_a(self.registers.h + self.registers.carry_flag() as u8),
-            0x8D => self.add_a(self.registers.l + self.registers.carry_flag() as u8),
+            0x88 => self.add_carry_a(self.registers.b),
+            0x89 => self.add_carry_a(self.registers.c),
+            0x8A => self.add_carry_a(self.registers.d),
+            0x8B => self.add_carry_a(self.registers.e),
+            0x8C => self.add_carry_a(self.registers.h),
+            0x8D => self.add_carry_a(self.registers.l),
             0x8E => {
-                self.add_a(mmu.read_byte(self.registers.hl()) + self.registers.carry_flag() as u8);
+                self.add_carry_a(mmu.read_byte(self.registers.hl()));
                 2
             }
-            0x8F => self.add_a(self.registers.a + self.registers.carry_flag() as u8),
-
+            0x8F => self.add_carry_a(self.registers.a),
             0x90 => self.sub_a(self.registers.b),
             0x91 => self.sub_a(self.registers.c),
             0x92 => self.sub_a(self.registers.d),
@@ -863,22 +874,22 @@ impl CPU {
             0x94 => self.sub_a(self.registers.h),
             0x95 => self.sub_a(self.registers.l),
             0x96 => {
-                self.sub_a(mmu.read_byte(self.registers.hl()));
+                self.sub_carry_a(mmu.read_byte(self.registers.hl()));
                 2
             }
             0x97 => self.sub_a(self.registers.a),
 
-            0x98 => self.sub_a(self.registers.b + self.registers.carry_flag() as u8),
-            0x99 => self.sub_a(self.registers.c + self.registers.carry_flag() as u8),
-            0x9A => self.sub_a(self.registers.d + self.registers.carry_flag() as u8),
-            0x9B => self.sub_a(self.registers.e + self.registers.carry_flag() as u8),
-            0x9C => self.sub_a(self.registers.h + self.registers.carry_flag() as u8),
-            0x9D => self.sub_a(self.registers.l + self.registers.carry_flag() as u8),
+            0x98 => self.sub_carry_a(self.registers.b),
+            0x99 => self.sub_carry_a(self.registers.c),
+            0x9A => self.sub_carry_a(self.registers.d),
+            0x9B => self.sub_carry_a(self.registers.e),
+            0x9C => self.sub_carry_a(self.registers.h),
+            0x9D => self.sub_carry_a(self.registers.l),
             0x9E => {
-                self.sub_a(mmu.read_byte(self.registers.hl()) + self.registers.carry_flag() as u8);
+                self.sub_carry_a(mmu.read_byte(self.registers.hl()));
                 2
             }
-            0x9F => self.sub_a(self.registers.a + self.registers.carry_flag() as u8),
+            0x9F => self.sub_carry_a(self.registers.a),
 
             0xA0 => self.and_a(self.registers.b),
             0xA1 => self.and_a(self.registers.c),
@@ -1252,7 +1263,7 @@ impl CPU {
                 4
             }
             0x17 => {
-                self.rlc(A);
+                self.rl(A);
                 2
             }
 
