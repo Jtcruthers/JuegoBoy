@@ -121,6 +121,18 @@ impl CPU {
         2
     }
 
+    fn rlc_16(&mut self, mmu: &mut impl Memory) -> u8 {
+        let value = mmu.read_byte(self.registers.hl());
+        let carry_bit = (value & 0b10000000) >> 7;
+        let new_value = (value << 1) + carry_bit;
+        self.registers
+            .set_flags(new_value == 0, false, false, carry_bit > 0);
+
+        mmu.write_byte(self.registers.hl(), new_value);
+
+        4
+    }
+
     fn rrc(&mut self, reg: Register) -> u8 {
         let carry_bit = self.registers[reg] & 1;
         self.registers[reg] = (self.registers[reg] >> 1) + (carry_bit << 7);
@@ -129,12 +141,35 @@ impl CPU {
         2
     }
 
+    fn rrc_16(&mut self, mmu: &mut impl Memory) -> u8 {
+        let value = mmu.read_byte(self.registers.hl());
+        let carry_bit = value & 1;
+        let new_value = (value >> 1) + (carry_bit << 7);
+        self.registers
+            .set_flags(new_value == 0, false, false, carry_bit > 0);
+
+        mmu.write_byte(self.registers.hl(), new_value);
+        4
+    }
+
     fn rl(&mut self, reg: Register) -> u8 {
         let carry_bit = (self.registers[reg] & 0b10000000) >> 7;
         self.registers[reg] = (self.registers[reg] << 1) + (self.registers.carry_flag() as u8);
         self.registers
             .set_flags(self.registers[reg] == 0, false, false, carry_bit > 0);
         2
+    }
+
+    fn rl_16(&mut self, mmu: &mut impl Memory) -> u8 {
+        let value = mmu.read_byte(self.registers.hl());
+        let carry_bit = value >> 7;
+        let new_value = (value << 1) + (self.registers.carry_flag() as u8);
+        self.registers
+            .set_flags(new_value == 0, false, false, carry_bit > 0);
+
+        mmu.write_byte(self.registers.hl(), new_value);
+
+        4
     }
 
     fn rr(&mut self, reg: Register) -> u8 {
@@ -146,12 +181,36 @@ impl CPU {
         2
     }
 
+    fn rr_16(&mut self, mmu: &mut impl Memory) -> u8 {
+        let value = mmu.read_byte(self.registers.hl());
+        let carry_bit = value & 1;
+        let new_value = (value >> 1) + ((self.registers.carry_flag() as u8) << 7);
+        self.registers
+            .set_flags(new_value == 0, false, false, carry_bit > 0);
+
+        mmu.write_byte(self.registers.hl(), new_value);
+
+        4
+    }
+
     fn sla(&mut self, reg: Register) -> u8 {
         let carry_bit = (self.registers[reg] & 0b10000000) >> 7;
         self.registers[reg] = self.registers[reg] << 1;
         self.registers
             .set_flags(self.registers[reg] == 0, false, false, carry_bit > 0);
         2
+    }
+
+    fn sla_16(&mut self, mmu: &mut impl Memory) -> u8 {
+        let value = mmu.read_byte(self.registers.hl());
+        let carry_bit = (value & 0b10000000) >> 7;
+        let new_value = value << 1;
+        self.registers
+            .set_flags(new_value == 0, false, false, carry_bit > 0);
+
+        mmu.write_byte(self.registers.hl(), new_value);
+
+        4
     }
 
     fn sra(&mut self, reg: Register) -> u8 {
@@ -163,18 +222,55 @@ impl CPU {
         2
     }
 
-    fn srl(&mut self, reg: Register) -> u8 {
-        let carry_bit = self.registers[reg] & 1;
-        self.registers[reg] = self.registers[reg] >> 1;
+    fn sra_16(&mut self, mmu: &mut impl Memory) -> u8 {
+        let value = mmu.read_byte(self.registers.hl());
+        let carry_bit = value & 1;
+        let msb = value & 0b10000000;
+        let new_value = (value >> 1) + msb;
         self.registers
-            .set_flags(self.registers[reg] == 0, false, false, carry_bit > 0);
+            .set_flags(new_value == 0, false, false, carry_bit > 0);
+
+        mmu.write_byte(self.registers.hl(), new_value);
+
+        4
+    }
+
+    fn srl(&mut self, value: u8) -> u8 {
+        let carry_bit = value & 1;
+        let new_value = value >> 1;
+        self.registers
+            .set_flags(new_value == 0, false, false, carry_bit > 0);
+
+        new_value
+    }
+
+    fn srl_reg(&mut self, reg: Register) -> u8 {
+        self.registers[reg] = self.srl(self.registers[reg]);
         2
     }
 
-    fn bit(&mut self, bit: u8, reg: Register) -> u8 {
-        let bit_is_set = self.registers[reg] & (1 << bit) > 0;
+    fn srl_hl(&mut self, mmu: &mut impl Memory) -> u8 {
+        let value = mmu.read_byte(self.registers.hl());
+        let new_value = self.srl(value);
+        mmu.write_byte(self.registers.hl(), new_value);
+
+        4
+    }
+
+    fn bit(&mut self, bit: u8, value: u8) {
+        let bit_is_set = value & (1 << bit) > 0;
         self.registers
             .set_flags(!bit_is_set, false, true, self.registers.carry_flag());
+    }
+
+    fn bit_reg(&mut self, bit: u8, reg: Register) -> u8 {
+        self.bit(bit, self.registers[reg]);
+        2
+    }
+
+    fn bit_hl(&mut self, bit: u8, mmu: &mut impl Memory) -> u8 {
+        let value = mmu.read_byte(self.registers.hl());
+        self.bit(bit, value);
         2
     }
 
@@ -190,11 +286,24 @@ impl CPU {
         2
     }
 
-    fn swap(&mut self, reg: Register) {
-        self.registers[reg] =
-            ((self.registers[reg] & 0x0F) << 4) + ((self.registers[reg] & 0xF0) >> 4);
+    fn swap(&mut self, value: u8) -> u8 {
+        let new_value = ((value & 0x0F) << 4) + ((value & 0xF0) >> 4);
         self.registers
-            .set_flags(self.registers[reg] == 0, false, false, false);
+            .set_flags(new_value == 0, false, false, false);
+
+        new_value
+    }
+
+    fn swap_reg(&mut self, reg: Register) {
+        self.registers[reg] = self.swap(self.registers[reg]);
+    }
+
+    fn swap_hl(&mut self, mmu: &mut impl Memory) -> u8 {
+        let value = mmu.read_byte(self.registers.hl());
+        let new_value = self.swap(value);
+        mmu.write_byte(self.registers.hl(), new_value);
+
+        4
     }
 
     fn read_u16(&mut self, address: u16, mmu: &mut impl Memory) -> u16 {
@@ -901,7 +1010,7 @@ impl CPU {
             0x94 => self.sub_a(self.registers.h),
             0x95 => self.sub_a(self.registers.l),
             0x96 => {
-                self.sub_carry_a(mmu.read_byte(self.registers.hl()));
+                self.sub_a(mmu.read_byte(self.registers.hl()));
                 2
             }
             0x97 => self.sub_a(self.registers.a),
@@ -1219,11 +1328,7 @@ impl CPU {
                 2
             }
             0x06 => {
-                let old_value = mmu.read_byte(self.registers.hl());
-                let carry_bit = (old_value & 0b10000000) >> 7;
-                let value = (old_value << 1) + carry_bit;
-                mmu.write_byte(self.registers.hl(), value);
-                self.registers.set_flags(false, false, false, carry_bit > 0);
+                self.rlc_16(mmu);
                 4
             }
             0x07 => {
@@ -1256,11 +1361,7 @@ impl CPU {
                 2
             }
             0x0E => {
-                let old_value = mmu.read_byte(self.registers.hl());
-                let carry_bit = old_value & 1;
-                let value = (old_value >> 1) + (carry_bit << 7);
-                mmu.write_byte(self.registers.hl(), value);
-                self.registers.set_flags(false, false, false, carry_bit > 0);
+                self.rrc_16(mmu);
                 4
             }
             0x0F => {
@@ -1293,11 +1394,7 @@ impl CPU {
                 2
             }
             0x16 => {
-                let old_value = mmu.read_byte(self.registers.hl());
-                let carry_bit = (old_value & 0b10000000) >> 7;
-                let value = (old_value << 1) + self.registers.carry_flag() as u8;
-                mmu.write_byte(self.registers.hl(), value);
-                self.registers.set_flags(false, false, false, carry_bit > 0);
+                self.rl_16(mmu);
                 4
             }
             0x17 => {
@@ -1330,12 +1427,7 @@ impl CPU {
                 2
             }
             0x1E => {
-                let old_value = mmu.read_byte(self.registers.hl());
-                let carry_bit = old_value & 1;
-                let value = (old_value >> 1) + ((self.registers.carry_flag() as u8) << 7);
-                mmu.write_byte(self.registers.hl(), value);
-                self.registers
-                    .set_flags(value == 0, false, false, carry_bit > 0);
+                self.rr_16(mmu);
                 4
             }
             0x1F => {
@@ -1368,7 +1460,8 @@ impl CPU {
                 2
             }
             0x26 => {
-                todo!("SLA (HL)");
+                self.sla_16(mmu);
+                4
             }
             0x27 => {
                 self.sla(A);
@@ -1400,7 +1493,8 @@ impl CPU {
                 2
             }
             0x2E => {
-                todo!("SRA (HL)");
+                self.sra_16(mmu);
+                4
             }
             0x2F => {
                 self.sra(A);
@@ -1408,188 +1502,166 @@ impl CPU {
             }
 
             0x30 => {
-                self.swap(B);
+                self.swap_reg(B);
                 2
             }
             0x31 => {
-                self.swap(C);
+                self.swap_reg(C);
                 2
             }
             0x32 => {
-                self.swap(D);
+                self.swap_reg(D);
                 2
             }
             0x33 => {
-                self.swap(E);
+                self.swap_reg(E);
                 2
             }
             0x34 => {
-                self.swap(H);
+                self.swap_reg(H);
                 2
             }
             0x35 => {
-                self.swap(L);
+                self.swap_reg(L);
                 2
             }
             0x36 => {
-                todo!("swap (HL)");
+                self.swap_hl(mmu);
+                4
             }
             0x37 => {
-                self.swap(A);
+                self.swap_reg(A);
                 2
             }
 
             0x38 => {
-                self.srl(B);
+                self.srl_reg(B);
                 2
             }
             0x39 => {
-                self.srl(C);
+                self.srl_reg(C);
                 2
             }
             0x3A => {
-                self.srl(D);
+                self.srl_reg(D);
                 2
             }
             0x3B => {
-                self.srl(E);
+                self.srl_reg(E);
                 2
             }
             0x3C => {
-                self.srl(H);
+                self.srl_reg(H);
                 2
             }
             0x3D => {
-                self.srl(L);
+                self.srl_reg(L);
                 2
             }
             0x3E => {
-                todo!("SRL (HL)");
+                self.srl_hl(mmu);
+                4
             }
             0x3F => {
-                self.srl(A);
+                self.srl_reg(A);
                 2
             }
 
-            0x40 => self.bit(0, B),
-            0x41 => self.bit(0, C),
-            0x42 => self.bit(0, D),
-            0x43 => self.bit(0, E),
-            0x44 => self.bit(0, H),
-            0x45 => self.bit(0, L),
+            0x40 => self.bit_reg(0, B),
+            0x41 => self.bit_reg(0, C),
+            0x42 => self.bit_reg(0, D),
+            0x43 => self.bit_reg(0, E),
+            0x44 => self.bit_reg(0, H),
+            0x45 => self.bit_reg(0, L),
             0x46 => {
-                let value = mmu.read_byte(self.registers.hl());
-                let bit_is_set = value & (1 << 0) > 0;
-                self.registers
-                    .set_flags(bit_is_set, false, true, self.registers.carry_flag());
+                self.bit_hl(0, mmu);
                 4
             }
-            0x47 => self.bit(0, A),
+            0x47 => self.bit_reg(0, A),
 
-            0x48 => self.bit(1, B),
-            0x49 => self.bit(1, C),
-            0x4A => self.bit(1, D),
-            0x4B => self.bit(1, E),
-            0x4C => self.bit(1, H),
-            0x4D => self.bit(1, L),
+            0x48 => self.bit_reg(1, B),
+            0x49 => self.bit_reg(1, C),
+            0x4A => self.bit_reg(1, D),
+            0x4B => self.bit_reg(1, E),
+            0x4C => self.bit_reg(1, H),
+            0x4D => self.bit_reg(1, L),
             0x4E => {
-                let value = mmu.read_byte(self.registers.hl());
-                let bit_is_set = value & (1 << 1) > 0;
-                self.registers
-                    .set_flags(bit_is_set, false, true, self.registers.carry_flag());
+                self.bit_hl(1, mmu);
                 4
             }
-            0x4F => self.bit(1, A),
+            0x4F => self.bit_reg(1, A),
 
-            0x50 => self.bit(2, B),
-            0x51 => self.bit(2, C),
-            0x52 => self.bit(2, D),
-            0x53 => self.bit(2, E),
-            0x54 => self.bit(2, H),
-            0x55 => self.bit(2, L),
+            0x50 => self.bit_reg(2, B),
+            0x51 => self.bit_reg(2, C),
+            0x52 => self.bit_reg(2, D),
+            0x53 => self.bit_reg(2, E),
+            0x54 => self.bit_reg(2, H),
+            0x55 => self.bit_reg(2, L),
             0x56 => {
-                let value = mmu.read_byte(self.registers.hl());
-                let bit_is_set = value & (1 << 2) > 0;
-                self.registers
-                    .set_flags(bit_is_set, false, true, self.registers.carry_flag());
+                self.bit_hl(2, mmu);
                 4
             }
-            0x57 => self.bit(2, A),
+            0x57 => self.bit_reg(2, A),
 
-            0x58 => self.bit(3, B),
-            0x59 => self.bit(3, C),
-            0x5A => self.bit(3, D),
-            0x5B => self.bit(3, E),
-            0x5C => self.bit(3, H),
-            0x5D => self.bit(3, L),
+            0x58 => self.bit_reg(3, B),
+            0x59 => self.bit_reg(3, C),
+            0x5A => self.bit_reg(3, D),
+            0x5B => self.bit_reg(3, E),
+            0x5C => self.bit_reg(3, H),
+            0x5D => self.bit_reg(3, L),
             0x5E => {
-                let value = mmu.read_byte(self.registers.hl());
-                let bit_is_set = value & (1 << 3) > 0;
-                self.registers
-                    .set_flags(bit_is_set, false, true, self.registers.carry_flag());
+                self.bit_hl(3, mmu);
                 4
             }
-            0x5F => self.bit(3, A),
+            0x5F => self.bit_reg(3, A),
 
-            0x60 => self.bit(4, B),
-            0x61 => self.bit(4, C),
-            0x62 => self.bit(4, D),
-            0x63 => self.bit(4, E),
-            0x64 => self.bit(4, H),
-            0x65 => self.bit(4, L),
+            0x60 => self.bit_reg(4, B),
+            0x61 => self.bit_reg(4, C),
+            0x62 => self.bit_reg(4, D),
+            0x63 => self.bit_reg(4, E),
+            0x64 => self.bit_reg(4, H),
+            0x65 => self.bit_reg(4, L),
             0x66 => {
-                let value = mmu.read_byte(self.registers.hl());
-                let bit_is_set = value & (1 << 4) > 0;
-                self.registers
-                    .set_flags(bit_is_set, false, true, self.registers.carry_flag());
+                self.bit_hl(4, mmu);
                 4
             }
-            0x67 => self.bit(4, A),
+            0x67 => self.bit_reg(4, A),
 
-            0x68 => self.bit(5, B),
-            0x69 => self.bit(5, C),
-            0x6A => self.bit(5, D),
-            0x6B => self.bit(5, E),
-            0x6C => self.bit(5, H),
-            0x6D => self.bit(5, L),
+            0x68 => self.bit_reg(5, B),
+            0x69 => self.bit_reg(5, C),
+            0x6A => self.bit_reg(5, D),
+            0x6B => self.bit_reg(5, E),
+            0x6C => self.bit_reg(5, H),
+            0x6D => self.bit_reg(5, L),
             0x6E => {
-                let value = mmu.read_byte(self.registers.hl());
-                let bit_is_set = value & (1 << 5) > 0;
-                self.registers
-                    .set_flags(bit_is_set, false, true, self.registers.carry_flag());
+                self.bit_hl(5, mmu);
                 4
             }
-            0x6F => self.bit(5, A),
+            0x6F => self.bit_reg(5, A),
 
-            0x70 => self.bit(6, B),
-            0x71 => self.bit(6, C),
-            0x72 => self.bit(6, D),
-            0x73 => self.bit(6, E),
-            0x74 => self.bit(6, H),
-            0x75 => self.bit(6, L),
+            0x70 => self.bit_reg(6, B),
+            0x71 => self.bit_reg(6, C),
+            0x72 => self.bit_reg(6, D),
+            0x73 => self.bit_reg(6, E),
+            0x74 => self.bit_reg(6, H),
+            0x75 => self.bit_reg(6, L),
             0x76 => {
-                let value = mmu.read_byte(self.registers.hl());
-                let bit_is_set = value & (1 << 6) > 0;
-                self.registers
-                    .set_flags(bit_is_set, false, true, self.registers.carry_flag());
+                self.bit_hl(6, mmu);
                 4
             }
-            0x77 => self.bit(6, A),
+            0x77 => self.bit_reg(6, A),
 
-            0x78 => self.bit(7, B),
-            0x79 => self.bit(7, C),
-            0x7A => self.bit(7, D),
-            0x7B => self.bit(7, E),
-            0x7C => self.bit(7, H),
-            0x7D => self.bit(7, L),
+            0x78 => self.bit_reg(7, B),
+            0x79 => self.bit_reg(7, C),
+            0x7A => self.bit_reg(7, D),
+            0x7B => self.bit_reg(7, E),
+            0x7C => self.bit_reg(7, H),
+            0x7D => self.bit_reg(7, L),
             0x7E => {
-                let value = mmu.read_byte(self.registers.hl());
-                let bit_is_set = value & (1 << 7) > 0;
-                self.registers
-                    .set_flags(bit_is_set, false, true, self.registers.carry_flag());
+                self.bit_hl(7, mmu);
                 4
             }
-            0x7F => self.bit(7, A),
+            0x7F => self.bit_reg(7, A),
 
             0x80 => self.res(0, B),
             0x81 => self.res(0, C),
@@ -1847,7 +1919,7 @@ mod tests {
     fn test_swap() {
         let mut cpu = CPU::new();
         cpu.registers[A] = 0xAB;
-        cpu.swap(A);
+        cpu.swap_reg(A);
         assert_eq!(cpu.registers[A], 0xBA);
     }
 
@@ -1879,7 +1951,7 @@ mod tests {
     fn test_srl() {
         let mut cpu = CPU::new();
         cpu.registers[A] = 0b10001010;
-        cpu.srl(A);
+        cpu.srl_reg(A);
         assert_eq!(cpu.registers[A], 0b01000101);
         assert_eq!(cpu.registers.carry_flag(), false);
 
