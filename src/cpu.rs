@@ -281,13 +281,10 @@ impl CPU {
         let old_hl = self.registers.hl();
         let new_hl = self.registers.hl().wrapping_add(value);
         let (upper, lower) = self.u16_to_u8s(new_hl);
-        let half_carry = (old_hl & 0x00FF) > (lower as u16);
-        self.registers.set_flags(
-            self.registers.zero_flag(),
-            false,
-            half_carry,
-            new_hl < old_hl,
-        );
+        let half_carry = (old_hl & 0x0FFF) + (value & 0x0FFF) > 0x0FFF;
+        let carry = value as u32 + old_hl as u32 > 0xFFFF;
+        self.registers
+            .set_flags(self.registers.zero_flag(), false, half_carry, carry);
         self.registers.h = upper;
         self.registers.l = lower;
         2
@@ -2291,32 +2288,32 @@ mod tests {
         assert_eq!(cpu.registers.hl(), 0x2468);
         assert_flags(&cpu, true, false, false, false);
 
-        cpu.registers.h = 0x00;
+        cpu.registers.h = 0x3F;
         cpu.registers.l = 0xFF;
         cpu.registers.f = 0b11000000;
 
         cpu.execute(0x29, &mut mmu);
 
-        assert_eq!(cpu.registers.hl(), 0x01FE);
+        assert_eq!(cpu.registers.hl(), 0x7FFE);
         assert_flags(&cpu, true, false, true, false);
 
-        cpu.registers.h = 0xFF;
-        cpu.registers.l = 0xFF;
+        cpu.registers.h = 0x80;
+        cpu.registers.l = 0x00;
         cpu.registers.f = 0b01000000;
 
         cpu.execute(0x29, &mut mmu);
 
-        assert_eq!(cpu.registers.hl(), 0xFFFE);
-        assert_flags(&cpu, false, false, true, true);
+        assert_eq!(cpu.registers.hl(), 0x0000);
+        assert_flags(&cpu, false, false, false, true);
 
         cpu.registers.h = 0xFF;
-        cpu.registers.l = 0x00;
+        cpu.registers.l = 0xFF;
         cpu.registers.f = 0b11000000;
 
         cpu.execute(0x29, &mut mmu);
 
-        assert_eq!(cpu.registers.hl(), 0xFE00);
-        assert_flags(&cpu, true, false, false, true);
+        assert_eq!(cpu.registers.hl(), 0xFFFE);
+        assert_flags(&cpu, true, false, true, true);
     }
 
     #[test]
@@ -2444,49 +2441,57 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.registers.h = 0x12;
-        cpu.registers.l = 0x34;
-        cpu.registers.d = 0x56;
-        cpu.registers.e = 0x78;
-        cpu.registers.f = 0b11000000;
-
-        cpu.execute(0x19, &mut mmu);
-
-        assert_eq!(cpu.registers.hl(), 0x1234 + 0x5678);
-        assert_flags(&cpu, true, false, false, false);
-
-        cpu.registers.h = 0x00;
+        // half carry, not carry
+        cpu.registers.h = 0b0011_1111;
         cpu.registers.l = 0xFF;
-        cpu.registers.d = 0x12;
+        cpu.registers.d = 0x00;
         cpu.registers.e = 0x01;
-        cpu.registers.f = 0b11000000;
+        cpu.registers.f = 0b01000000;
 
         cpu.execute(0x19, &mut mmu);
 
-        assert_eq!(cpu.registers.hl(), 0x1300);
-        assert_flags(&cpu, true, false, true, false);
+        assert_eq!(cpu.registers.de(), 0x0001);
+        assert_eq!(cpu.registers.hl(), 0b01000000_00000000);
+        assert_flags(&cpu, false, false, true, false);
 
+        // carry and half carry
         cpu.registers.h = 0xFF;
         cpu.registers.l = 0xFF;
         cpu.registers.d = 0x00;
         cpu.registers.e = 0x01;
-        cpu.registers.f = 0b11000000;
+        cpu.registers.f = 0b01000000;
 
         cpu.execute(0x19, &mut mmu);
 
-        assert_eq!(cpu.registers.hl(), 0x0);
-        assert_flags(&cpu, true, false, true, true);
+        assert_eq!(cpu.registers.de(), 0x0001);
+        assert_eq!(cpu.registers.hl(), 0x00);
+        assert_flags(&cpu, false, false, true, true);
 
-        cpu.registers.h = 0xFF;
-        cpu.registers.l = 0x00;
-        cpu.registers.d = 0x01;
+        // cary, not half carry
+        cpu.registers.h = 0xF0;
+        cpu.registers.l = 0xFF;
+        cpu.registers.d = 0xF0;
         cpu.registers.e = 0x00;
-        cpu.registers.f = 0b11000000;
+        cpu.registers.f = 0b01000000;
 
         cpu.execute(0x19, &mut mmu);
 
-        assert_eq!(cpu.registers.hl(), 0x0);
-        assert_flags(&cpu, true, false, false, true);
+        assert_eq!(cpu.registers.de(), 0xF000);
+        assert_eq!(cpu.registers.hl(), 0b1110_0000_1111_1111);
+        assert_flags(&cpu, false, false, false, true);
+
+        // not cary, not half carry
+        cpu.registers.h = 0x01;
+        cpu.registers.l = 0x00;
+        cpu.registers.d = 0x00;
+        cpu.registers.e = 0x00;
+        cpu.registers.f = 0b01000000;
+
+        cpu.execute(0x19, &mut mmu);
+
+        assert_eq!(cpu.registers.de(), 0x0000);
+        assert_eq!(cpu.registers.hl(), 0x0100);
+        assert_flags(&cpu, false, false, false, false);
     }
 
     #[test]
@@ -2875,19 +2880,57 @@ mod tests {
         let mut cpu = CPU::new();
         let mut mmu = TestMMU::new();
 
-        cpu.registers.h = 0x12;
-        cpu.registers.l = 0x34;
-        cpu.registers.b = 0x56;
-        cpu.registers.c = 0x78;
+        // half carry, not carry
+        cpu.registers.h = 0b0011_1111;
+        cpu.registers.l = 0xFF;
+        cpu.registers.b = 0x00;
+        cpu.registers.c = 0x01;
         cpu.registers.f = 0b01000000;
 
         cpu.execute(0x09, &mut mmu);
 
-        assert_eq!(cpu.registers.bc(), 0x5678);
-        assert_eq!(cpu.registers.hl(), 0x1234 + 0x5678);
-        assert_eq!(cpu.registers.subtract_flag(), false); // Resets
-        assert_eq!(cpu.registers.half_carry_flag(), false); //TODO
-        assert_eq!(cpu.registers.carry_flag(), false); //TODO
+        assert_eq!(cpu.registers.bc(), 0x0001);
+        assert_eq!(cpu.registers.hl(), 0b01000000_00000000);
+        assert_flags(&cpu, false, false, true, false);
+
+        // carry and half carry
+        cpu.registers.h = 0xFF;
+        cpu.registers.l = 0xFF;
+        cpu.registers.b = 0x00;
+        cpu.registers.c = 0x01;
+        cpu.registers.f = 0b01000000;
+
+        cpu.execute(0x09, &mut mmu);
+
+        assert_eq!(cpu.registers.bc(), 0x0001);
+        assert_eq!(cpu.registers.hl(), 0x00);
+        assert_flags(&cpu, false, false, true, true);
+
+        // cary, not half carry
+        cpu.registers.h = 0xF0;
+        cpu.registers.l = 0xFF;
+        cpu.registers.b = 0xF0;
+        cpu.registers.c = 0x00;
+        cpu.registers.f = 0b01000000;
+
+        cpu.execute(0x09, &mut mmu);
+
+        assert_eq!(cpu.registers.bc(), 0xF000);
+        assert_eq!(cpu.registers.hl(), 0b1110_0000_1111_1111);
+        assert_flags(&cpu, false, false, false, true);
+
+        // not cary, not half carry
+        cpu.registers.h = 0x01;
+        cpu.registers.l = 0x00;
+        cpu.registers.b = 0x00;
+        cpu.registers.c = 0x00;
+        cpu.registers.f = 0b01000000;
+
+        cpu.execute(0x09, &mut mmu);
+
+        assert_eq!(cpu.registers.bc(), 0x0000);
+        assert_eq!(cpu.registers.hl(), 0x0100);
+        assert_flags(&cpu, false, false, false, false);
     }
 
     #[test]
@@ -3116,6 +3159,7 @@ mod tests {
         assert_eq!(cycles, 3);
     }
 
+    #[track_caller]
     fn assert_flags(cpu: &CPU, zero: bool, subtract: bool, half_carry: bool, carry: bool) {
         assert_eq!(cpu.registers.zero_flag(), zero);
         assert_eq!(cpu.registers.subtract_flag(), subtract);
