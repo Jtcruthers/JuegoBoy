@@ -41,7 +41,7 @@ impl PPU {
         }
     }
 
-    pub fn write_byte(&mut self, address: u16, value: u8) {
+    pub fn write_byte(&mut self, address: u16, _value: u8) {
         match address {
             _ => (),
         }

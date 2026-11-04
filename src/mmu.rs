@@ -2,6 +2,7 @@ use std::io::Write;
 
 use log::*;
 
+use crate::apu::APU;
 use crate::cartridge::Cartridge;
 use crate::joypad::Joypad;
 use crate::ppu::PPU;
@@ -35,6 +36,7 @@ pub struct MMU {
     joypad: Joypad,
     pub ppu: PPU,
     pub timer: Timer,
+    pub apu: APU,
 }
 
 impl MMU {
@@ -52,6 +54,7 @@ impl MMU {
             joypad: Joypad::new(),
             ppu: PPU::new(),
             timer: Timer::new(),
+            apu: APU::new(),
         }
     }
 
@@ -110,6 +113,8 @@ impl MMU {
         if self.joypad.interrupt {
             self.if_reg |= 0b10000;
         }
+
+        self.apu.step(cycles);
     }
 }
 
@@ -154,10 +159,12 @@ impl Memory for MMU {
     }
 }
 
+#[cfg(test)]
 pub struct TestMMU {
     pub memory: [u8; 0xFFFF],
 }
 
+#[cfg(test)]
 impl TestMMU {
     pub fn new() -> Self {
         TestMMU {
@@ -166,6 +173,7 @@ impl TestMMU {
     }
 }
 
+#[cfg(test)]
 impl Memory for TestMMU {
     fn read_byte(&self, address: u16) -> u8 {
         self.memory[address as usize]

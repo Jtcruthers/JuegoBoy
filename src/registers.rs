@@ -13,6 +13,7 @@ pub enum Register {
     C,
     D,
     E,
+    #[expect(dead_code, reason = "Keeping for completeness")]
     F,
     H,
     L,
@@ -35,19 +36,14 @@ impl fmt::Display for Register {
 }
 
 pub enum Register16 {
+    #[expect(dead_code, reason = "Keeping for completeness")]
     AF,
     BC,
     DE,
     HL,
     SP,
+    #[expect(dead_code, reason = "Keeping for completeness")]
     PC,
-}
-
-pub enum Flag {
-    Zero,
-    Subtract,
-    HalfCarry,
-    Carry,
 }
 
 pub struct Registers {
@@ -124,17 +120,6 @@ impl Registers {
 
     pub fn hl(&self) -> u16 {
         ((self.h as u16) << 8) + self.l as u16
-    }
-
-    pub fn get_reg16(&mut self, reg: Register16) -> u16 {
-        match reg {
-            AF => self.af(),
-            BC => self.bc(),
-            DE => self.de(),
-            HL => self.hl(),
-            SP => panic!("SP is not a register"),
-            PC => panic!("PC is not a register"),
-        }
     }
 
     pub fn set_16(&mut self, register: Register16, value: u16) {
