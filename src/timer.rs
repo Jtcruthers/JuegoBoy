@@ -44,7 +44,7 @@ impl Timer {
                 Frequency::Hz16384 => 64,
             };
 
-            if self.tima_cycles > max_cycles {
+            while self.tima_cycles >= max_cycles {
                 self.tima_cycles -= max_cycles;
                 self.tima = self.tima.wrapping_add(1);
 
@@ -92,7 +92,7 @@ impl Memory for Timer {
     fn write_byte(&mut self, address: u16, value: u8) {
         match address {
             0xFF04 => self.system_counter &= 0x00FF,
-            0xFF05 => (),
+            0xFF05 => self.tima = value,
             0xFF06 => self.tma = value,
             0xFF07 => {
                 self.tac = match value & 0b11 {
