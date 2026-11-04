@@ -91,7 +91,7 @@ impl Memory for Timer {
 
     fn write_byte(&mut self, address: u16, value: u8) {
         match address {
-            0xFF04 => self.system_counter &= 0x00FF,
+            0xFF04 => self.system_counter = 0,
             0xFF05 => self.tima = value,
             0xFF06 => self.tma = value,
             0xFF07 => {
@@ -132,6 +132,21 @@ mod tests {
         assert_eq!(timer.div(), 0);
 
         timer.step(63);
+        assert_eq!(timer.div(), 1);
+    }
+
+    #[test]
+    fn test_div_write_resets_counter() {
+        let mut timer = Timer::new();
+        // halfway to the first DIV increment
+        timer.step(32);
+        timer.write_byte(0xFF04, 0x01);
+        assert_eq!(timer.div(), 0);
+
+        // rest of way to increment
+        timer.step(33);
+        assert_eq!(timer.div(), 0);
+        timer.step(32);
         assert_eq!(timer.div(), 1);
     }
 }
