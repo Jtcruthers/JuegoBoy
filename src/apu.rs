@@ -5,5 +5,5 @@ impl APU {
         APU {}
     }
 
-    pub fn step(&mut self, _cycles: u8) {}
+    pub fn tick(&mut self) {}
 }

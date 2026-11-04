@@ -32,45 +32,13 @@ impl Timer {
         }
     }
 
-    pub fn step(&mut self, cycles: u8) {
-        // counter increments on t-cycles, but we use m-cycles
-        self.system_counter = self.system_counter.wrapping_add(cycles as u16 * 4);
-        // tac uses m-cycles already, so just use cycles directly
-        self.tima_cycles = self.tima_cycles.wrapping_add(cycles as u64);
-
-        if self.enabled {
-            let max_cycles = match self.tac {
-                Frequency::Hz4096 => 256,
-                Frequency::Hz262144 => 4,
-                Frequency::Hz65536 => 16,
-                Frequency::Hz16384 => 64,
-            };
-
-            while self.tima_cycles >= max_cycles {
-                self.tima_cycles -= max_cycles;
-                self.tima = self.tima.wrapping_add(1);
-
-                if self.tima == 0 {
-                    // When tima overflows, reset to vlaue in TMA and request interrupt
-                    self.tima = self.previous_tma;
-                    self.interrupt = true;
-                }
-            }
-        }
-
-        // After ticking, the previous tma is no longer needed, so reset it to tma
-        // This way, if a tma write is executed on same m-cycle as content of tma is transffered to
-        // tima, the old value is used
-        self.previous_tma = self.tma;
-    }
-
     fn div(&self) -> u8 {
         (self.system_counter >> 8) as u8
     }
 }
 
 impl Memory for Timer {
-    fn read_byte(&self, address: u16) -> u8 {
+    fn read_byte(&mut self, address: u16) -> u8 {
         match address {
             0xFF04 => self.div(),
             0xFF05 => self.tima,
@@ -110,6 +78,38 @@ impl Memory for Timer {
             _ => panic!("Invalid Timer write address: {:X}", address),
         }
     }
+
+    fn tick(&mut self) {
+        // counter increments on t-cycles, but we use m-cycles
+        self.system_counter = self.system_counter.wrapping_add(4);
+        // tac uses m-cycles already, so just use cycles directly
+        self.tima_cycles = self.tima_cycles.wrapping_add(1);
+
+        if self.enabled {
+            let max_cycles = match self.tac {
+                Frequency::Hz4096 => 256,
+                Frequency::Hz262144 => 4,
+                Frequency::Hz65536 => 16,
+                Frequency::Hz16384 => 64,
+            };
+
+            while self.tima_cycles >= max_cycles {
+                self.tima_cycles -= max_cycles;
+                self.tima = self.tima.wrapping_add(1);
+
+                if self.tima == 0 {
+                    // When tima overflows, reset to vlaue in TMA and request interrupt
+                    self.tima = self.previous_tma;
+                    self.interrupt = true;
+                }
+            }
+        }
+
+        // After ticking, the previous tma is no longer needed, so reset it to tma
+        // This way, if a tma write is executed on same m-cycle as content of tma is transffered to
+        // tima, the old value is used
+        self.previous_tma = self.tma;
+    }
 }
 
 #[cfg(test)]
@@ -119,10 +119,12 @@ mod tests {
     #[test]
     fn test_inc_div() {
         let mut timer = Timer::new();
-        timer.step(1);
+        timer.tick();
         assert_eq!(timer.div(), 0);
 
-        timer.step(63);
+        for _ in 0..63 {
+            timer.tick();
+        }
         assert_eq!(timer.div(), 1);
     }
 
@@ -130,10 +132,12 @@ mod tests {
     fn test_inc_div_when_disabled() {
         let mut timer = Timer::new();
         timer.enabled = false;
-        timer.step(1);
+        timer.tick();
         assert_eq!(timer.div(), 0);
 
-        timer.step(63);
+        for _ in 0..63 {
+            timer.tick();
+        }
         assert_eq!(timer.div(), 1);
     }
 
@@ -141,14 +145,20 @@ mod tests {
     fn test_div_write_resets_counter() {
         let mut timer = Timer::new();
         // halfway to the first DIV increment
-        timer.step(32);
+        for _ in 0..32 {
+            timer.tick();
+        }
         timer.write_byte(0xFF04, 0x01);
         assert_eq!(timer.div(), 0);
 
         // rest of way to increment
-        timer.step(33);
+        for _ in 0..33 {
+            timer.tick();
+        }
         assert_eq!(timer.div(), 0);
-        timer.step(32);
+        for _ in 0..32 {
+            timer.tick();
+        }
         assert_eq!(timer.div(), 1);
     }
 }

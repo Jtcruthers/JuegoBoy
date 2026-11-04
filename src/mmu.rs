@@ -9,8 +9,9 @@ use crate::ppu::PPU;
 use crate::timer::Timer;
 
 pub trait Memory {
-    fn read_byte(&self, address: u16) -> u8;
+    fn read_byte(&mut self, address: u16) -> u8;
     fn write_byte(&mut self, address: u16, value: u8);
+    fn tick(&mut self);
 }
 
 /*
@@ -58,7 +59,7 @@ impl MMU {
         }
     }
 
-    fn handle_io_read(&self, address: u16) -> u8 {
+    fn handle_io_read(&mut self, address: u16) -> u8 {
         match address {
             0xFF00 => self.joypad.read_byte(address),
             0xFF01 => todo!("Serial"), //TODO - Serial
@@ -94,9 +95,12 @@ impl MMU {
     pub fn boot_rom_active(&self) -> bool {
         self.boot_rom_reg == 0
     }
+}
 
-    pub fn step(&mut self, cycles: u8) {
-        self.ppu.step(cycles);
+impl Memory for MMU {
+    /// Ticks all components, except for the CPU, exactly 1 m-cycle
+    fn tick(&mut self) {
+        self.ppu.tick();
         if self.ppu.interrupt_vblank {
             self.if_reg |= 0b1;
             self.ppu.interrupt_vblank = false;
@@ -106,25 +110,23 @@ impl MMU {
             self.ppu.interrupt_stat = false;
         }
 
-        self.timer.step(cycles);
+        self.timer.tick();
         if self.timer.interrupt {
             self.if_reg |= 0b100;
             self.timer.interrupt = false;
         }
 
-        self.joypad.step();
+        self.joypad.tick();
         if self.joypad.interrupt {
             self.if_reg |= 0b10000;
             self.joypad.interrupt = false;
         }
 
-        self.apu.step(cycles);
+        self.apu.tick();
     }
-}
 
-impl Memory for MMU {
-    fn read_byte(&self, address: u16) -> u8 {
-        match address {
+    fn read_byte(&mut self, address: u16) -> u8 {
+        let byte = match address {
             0x0000..=0x3FFF => {
                 if self.boot_rom_reg == 0 && address < 0x100 {
                     BOOT_ROM[address as usize]
@@ -142,7 +144,9 @@ impl Memory for MMU {
             0xFF00..=0xFF7F => self.handle_io_read(address),
             0xFF80..=0xFFFE => self.high_ram[(address - 0xFF80) as usize],
             0xFFFF => self.ie_reg,
-        }
+        };
+
+        byte
     }
 
     fn write_byte(&mut self, address: u16, value: u8) {
@@ -179,7 +183,7 @@ impl TestMMU {
 
 #[cfg(test)]
 impl Memory for TestMMU {
-    fn read_byte(&self, address: u16) -> u8 {
+    fn read_byte(&mut self, address: u16) -> u8 {
         self.memory[address as usize]
     }
 
@@ -192,4 +196,7 @@ impl Memory for TestMMU {
         }
         self.memory[address as usize] = value;
     }
+
+    // noop
+    fn tick(&mut self) {}
 }

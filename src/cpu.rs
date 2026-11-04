@@ -56,13 +56,14 @@ impl CPU {
     }
 
     fn fetch(&mut self, mmu: &mut impl Memory) -> u8 {
-        let opcode = mmu.read_byte(self.pc);
+        let opcode = self.read_byte(mmu, self.pc);
         self.pc += 1;
         opcode
     }
 
     pub fn step(&mut self, mmu: &mut impl Memory) -> u8 {
         trace!("\n\n");
+        // I dont think we want to tick here for these
         let interrupts_pending = mmu.read_byte(IF_FLAG) & mmu.read_byte(IE_FLAG);
 
         if self.halted {
@@ -106,6 +107,20 @@ impl CPU {
         cycles
     }
 
+    fn read_byte(&mut self, mmu: &mut impl Memory, address: u16) -> u8 {
+        let value = mmu.read_byte(address);
+        mmu.tick();
+        value
+    }
+
+    fn write_byte(&mut self, mmu: &mut impl Memory, address: u16, value: u8) {
+        mmu.write_byte(address, value);
+        mmu.tick();
+    }
+
+    /// Helper that takes a u16 and splits it into two individual u8 bytes
+    ///
+    /// Does NOT call tick, the caller is responsible for calling it if necessary
     fn u16_to_u8s(&self, value: u16) -> (u8, u8) {
         let upper = (value >> 8) as u8;
         let lower = (value & 0x00FF) as u8;
@@ -122,15 +137,14 @@ impl CPU {
         new_value
     }
 
-    fn rlc_reg(&mut self, reg: Register) -> u8 {
+    fn rlc_reg(&mut self, reg: Register) {
         self.registers[reg] = self.rlc(self.registers[reg]);
-        2
     }
 
     fn rlc_hl(&mut self, mmu: &mut impl Memory) -> u8 {
-        let value = mmu.read_byte(self.registers.hl());
+        let value = self.read_byte(mmu, self.registers.hl());
         let new_value = self.rlc(value);
-        mmu.write_byte(self.registers.hl(), new_value);
+        self.write_byte(mmu, self.registers.hl(), new_value);
 
         4
     }
@@ -144,15 +158,14 @@ impl CPU {
         new_value
     }
 
-    fn rrc_reg(&mut self, reg: Register) -> u8 {
+    fn rrc_reg(&mut self, reg: Register) {
         self.registers[reg] = self.rrc(self.registers[reg]);
-        2
     }
 
     fn rrc_hl(&mut self, mmu: &mut impl Memory) -> u8 {
-        let value = mmu.read_byte(self.registers.hl());
+        let value = self.read_byte(mmu, self.registers.hl());
         let new_value = self.rrc(value);
-        mmu.write_byte(self.registers.hl(), new_value);
+        self.write_byte(mmu, self.registers.hl(), new_value);
 
         4
     }
@@ -172,9 +185,9 @@ impl CPU {
     }
 
     fn rl_hl(&mut self, mmu: &mut impl Memory) -> u8 {
-        let value = mmu.read_byte(self.registers.hl());
+        let value = self.read_byte(mmu, self.registers.hl());
         let new_value = self.rl(value);
-        mmu.write_byte(self.registers.hl(), new_value);
+        self.write_byte(mmu, self.registers.hl(), new_value);
 
         4
     }
@@ -194,9 +207,9 @@ impl CPU {
     }
 
     fn rr_hl(&mut self, mmu: &mut impl Memory) -> u8 {
-        let value = mmu.read_byte(self.registers.hl());
+        let value = self.read_byte(mmu, self.registers.hl());
         let new_value = self.rr(value);
-        mmu.write_byte(self.registers.hl(), new_value);
+        self.write_byte(mmu, self.registers.hl(), new_value);
 
         4
     }
@@ -216,10 +229,10 @@ impl CPU {
     }
 
     fn sla_hl(&mut self, mmu: &mut impl Memory) -> u8 {
-        let value = mmu.read_byte(self.registers.hl());
+        let value = self.read_byte(mmu, self.registers.hl());
         let new_value = self.sla(value);
 
-        mmu.write_byte(self.registers.hl(), new_value);
+        self.write_byte(mmu, self.registers.hl(), new_value);
 
         4
     }
@@ -240,9 +253,9 @@ impl CPU {
     }
 
     fn sra_hl(&mut self, mmu: &mut impl Memory) -> u8 {
-        let value = mmu.read_byte(self.registers.hl());
+        let value = self.read_byte(mmu, self.registers.hl());
         let new_value = self.sra(value);
-        mmu.write_byte(self.registers.hl(), new_value);
+        self.write_byte(mmu, self.registers.hl(), new_value);
 
         4
     }
@@ -262,9 +275,9 @@ impl CPU {
     }
 
     fn srl_hl(&mut self, mmu: &mut impl Memory) -> u8 {
-        let value = mmu.read_byte(self.registers.hl());
+        let value = self.read_byte(mmu, self.registers.hl());
         let new_value = self.srl(value);
-        mmu.write_byte(self.registers.hl(), new_value);
+        self.write_byte(mmu, self.registers.hl(), new_value);
 
         4
     }
@@ -281,7 +294,7 @@ impl CPU {
     }
 
     fn bit_hl(&mut self, bit: u8, mmu: &mut impl Memory) -> u8 {
-        let value = mmu.read_byte(self.registers.hl());
+        let value = self.read_byte(mmu, self.registers.hl());
         self.bit(bit, value);
         3
     }
@@ -297,9 +310,9 @@ impl CPU {
     }
 
     fn res_hl(&mut self, bit: u8, mmu: &mut impl Memory) -> u8 {
-        let value = mmu.read_byte(self.registers.hl());
+        let value = self.read_byte(mmu, self.registers.hl());
         let new_value = self.res(bit, value);
-        mmu.write_byte(self.registers.hl(), new_value);
+        self.write_byte(mmu, self.registers.hl(), new_value);
         4
     }
 
@@ -314,9 +327,9 @@ impl CPU {
     }
 
     fn set_hl(&mut self, bit: u8, mmu: &mut impl Memory) -> u8 {
-        let value = mmu.read_byte(self.registers.hl());
+        let value = self.read_byte(mmu, self.registers.hl());
         let new_value = self.set(bit, value);
-        mmu.write_byte(self.registers.hl(), new_value);
+        self.write_byte(mmu, self.registers.hl(), new_value);
         4
     }
 
@@ -334,20 +347,23 @@ impl CPU {
     }
 
     fn swap_hl(&mut self, mmu: &mut impl Memory) -> u8 {
-        let value = mmu.read_byte(self.registers.hl());
+        let value = self.read_byte(mmu, self.registers.hl());
         let new_value = self.swap(value);
-        mmu.write_byte(self.registers.hl(), new_value);
+        self.write_byte(mmu, self.registers.hl(), new_value);
 
         4
     }
 
+    /// Read a u16 from address and address+1, and combines them into a single u16
+    /// Takes 2 M-cycles
     fn read_u16(&mut self, address: u16, mmu: &mut impl Memory) -> u16 {
-        let upper = mmu.read_byte(address + 1) as u16;
-        let lower = mmu.read_byte(address) as u16;
+        let upper = self.read_byte(mmu, address + 1) as u16;
+        let lower = self.read_byte(mmu, address) as u16;
 
         (upper << 8) + lower
     }
 
+    /// Helper to take a u8, increments it, and sets flags according to INC r8
     fn inc_u8_and_set_flags(&mut self, value: u8) -> u8 {
         let result = value.wrapping_add(1);
 
@@ -360,6 +376,7 @@ impl CPU {
         result
     }
 
+    /// Helper to take a u8, decrement it, and sets flags according to DEC r8
     fn dec_u8_and_set_flags(&mut self, value: u8) -> u8 {
         let result = value.wrapping_sub(1);
 
@@ -372,72 +389,92 @@ impl CPU {
         result
     }
 
-    /** Get value from the stack and increment sp */
+    /// Returns the u16 value from the stack and increment sp
+    ///
+    /// Takes 2 M-Cycles
     fn pop(&mut self, mmu: &mut impl Memory) -> (u8, u8) {
         let value = self.read_u16(self.sp, mmu);
         self.sp += 2;
         self.u16_to_u8s(value)
     }
 
-    /** Put value onto the stack and decrement sp */
-    fn push(&mut self, value: u16, mmu: &mut impl Memory) -> u8 {
+    /// Pushes the value onto the stack and decrement sp twice
+    ///
+    /// Takes 3 M-Cycles
+    fn push(&mut self, value: u16, mmu: &mut impl Memory) {
         let (upper, lower) = self.u16_to_u8s(value);
+        mmu.tick();
         self.sp -= 1;
-        mmu.write_byte(self.sp, upper);
+        self.write_byte(mmu, self.sp, upper);
         self.sp -= 1;
-        mmu.write_byte(self.sp, lower);
-        4
+        self.write_byte(mmu, self.sp, lower);
     }
 
-    fn call(&mut self, condition: bool, mmu: &mut impl Memory) -> u8 {
+    /// Pushes address on stack, if the condition is met
+    /// Used for CALL n16 and CALL cc,n16, since they take the same amount of
+    /// cycles when cc is true
+    ///
+    /// Takes 5 M-cycles if condition is met, else 2
+    fn call(&mut self, condition: bool, mmu: &mut impl Memory) {
         let address = self.read_u16(self.pc, mmu);
         self.pc += 2;
         if condition {
+            trace!("calling, condition met");
             self.push(self.pc, mmu);
             self.pc = address;
-            6
         } else {
-            3
+            trace!("not calling, condition not met");
         }
     }
 
-    fn jump_relative(&mut self, condition: bool, mmu: &mut impl Memory) -> u8 {
-        let offset = mmu.read_byte(self.pc) as i8;
+    /// Relative jump, if condition is met
+    /// Also used for JR n16, since it takes the same amount of
+    /// cycles as JR cc,n16 when condition is met
+    ///
+    /// Takes 2 M-Cycles if condition is met, else 1
+    fn jump_relative(&mut self, condition: bool, mmu: &mut impl Memory) {
+        let offset = self.read_byte(mmu, self.pc) as i8;
         self.pc += 1;
         if condition {
             trace!("jump relative offset: {:X}", offset);
             self.pc = ((self.pc as u32 as i32) + (offset as i32)) as u16;
-            3
+            mmu.tick(); // Have to tick one for the jump
         } else {
             trace!("not jumping relative");
-            2
         }
     }
 
-    fn jump_abs(&mut self, condition: bool, mmu: &mut impl Memory) -> u8 {
+    /// Absolute jump to address, if condition is met
+    /// Also used for JP n16, since it takes the same amount of
+    /// cycles as JP cc,n16 when condition is true
+    ///
+    /// Takes 3 M-cycles if condition is met, else 2
+    fn jump_abs(&mut self, condition: bool, mmu: &mut impl Memory) {
         let address = self.read_u16(self.pc, mmu);
         self.pc += 2;
         if condition {
             trace!("jumping abs to address: {:X}", address);
             self.pc = address;
-            4
+            mmu.tick(); // Have to tick one for the jump
         } else {
-            trace!("not jumping abs");
-            3
+            trace!("not jumping absolute");
         }
     }
 
-    fn add_u16_to_hl(&mut self, value: u16) -> u8 {
+    /// Adds a u16 value to HL.
+    ///
+    /// Takes 1 M-Cycle.
+    fn add_u16_to_hl(&mut self, mmu: &mut impl Memory, value: u16) {
         let old_hl = self.registers.hl();
         let new_hl = self.registers.hl().wrapping_add(value);
         let (upper, lower) = self.u16_to_u8s(new_hl);
+        mmu.tick();
         let half_carry = (old_hl & 0x0FFF) + (value & 0x0FFF) > 0x0FFF;
         let carry = value as u32 + old_hl as u32 > 0xFFFF;
         self.registers
             .set_flags(self.registers.zero_flag(), false, half_carry, carry);
         self.registers.h = upper;
         self.registers.l = lower;
-        2
     }
 
     fn halt(&mut self) {
@@ -445,17 +482,16 @@ impl CPU {
         self.halted = true;
     }
 
-    fn add_a(&mut self, value: u8) -> u8 {
+    fn add_a(&mut self, value: u8) {
         let old_a = self.registers.a;
         let new_a = self.registers.a.wrapping_add(value);
         let half_carry = (old_a & 0x0F) + (value & 0x0F) > 0x0F;
         self.registers
             .set_flags(new_a == 0, false, half_carry, new_a < old_a);
         self.registers.a = new_a;
-        1
     }
 
-    fn add_carry_a(&mut self, value: u8) -> u8 {
+    fn add_carry_a(&mut self, value: u8) {
         let old_a = self.registers.a;
         let new_a = self
             .registers
@@ -467,20 +503,18 @@ impl CPU {
         self.registers
             .set_flags(new_a == 0, false, half_carry, carry);
         self.registers.a = new_a;
-        1
     }
 
-    fn sub_a(&mut self, value: u8) -> u8 {
+    fn sub_a(&mut self, value: u8) {
         let old_a = self.registers.a;
         let new_a = self.registers.a.wrapping_sub(value);
         let half_carry = (old_a & 0x0F) < (value & 0x0F);
         self.registers
             .set_flags(new_a == 0, true, half_carry, new_a > old_a);
         self.registers.a = new_a;
-        1
     }
 
-    fn sub_carry_a(&mut self, value: u8) -> u8 {
+    fn sub_carry_a(&mut self, value: u8) {
         let old_a = self.registers.a;
         let new_a = self
             .registers
@@ -492,59 +526,77 @@ impl CPU {
         self.registers
             .set_flags(new_a == 0, true, half_carry, carry);
         self.registers.a = new_a;
-        1
     }
 
-    fn and_a(&mut self, value: u8) -> u8 {
+    fn and_a(&mut self, value: u8) {
         self.registers.a &= value;
         self.registers
             .set_flags(self.registers.a == 0, false, true, false);
-        1
     }
 
-    fn xor_a(&mut self, value: u8) -> u8 {
+    fn xor_a(&mut self, value: u8) {
         self.registers.a ^= value;
         self.registers
             .set_flags(self.registers.a == 0, false, false, false);
-        1
     }
 
-    fn or_a(&mut self, value: u8) -> u8 {
+    fn or_a(&mut self, value: u8) {
         self.registers.a |= value;
         self.registers
             .set_flags(self.registers.a == 0, false, false, false);
-        1
     }
 
-    fn cp_a(&mut self, value: u8) -> u8 {
+    fn cp_a(&mut self, value: u8) {
         let h = (self.registers.a & 0x0F) < (value & 0x0F);
         self.registers
             .set_flags(self.registers.a == value, true, h, self.registers.a < value);
-        1
     }
 
-    fn ret(&mut self, condition: bool, mmu: &mut impl Memory) -> u8 {
+    /// Non-conditional return. Always takes 3 M-cycles
+    fn ret(&mut self, mmu: &mut impl Memory) {
+        let (upper, lower) = self.pop(mmu);
+
+        let new_pc = ((upper as u16) << 8) as u16 + lower as u16;
+        mmu.tick(); // Assuming the third cycle is before setting pc?
+
+        self.pc = new_pc;
+    }
+
+    /// Conditional return.
+    ///
+    /// If true, takes 4 M-cycles, else 1
+    fn ret_cc(&mut self, condition: bool, mmu: &mut impl Memory) {
+        // I assume the actual hardware would do one tick to calculate the condition, pop takes 2, then one to set the u16
+        // So I assume I should spread out the ticks to be more accurate?
+
+        mmu.tick(); // tick for condition
+
         if condition {
             let (upper, lower) = self.pop(mmu);
-            self.pc = ((upper as u16) << 8) as u16 + lower as u16;
-            return 5;
+
+            let new_pc = ((upper as u16) << 8) as u16 + lower as u16;
+
+            self.pc = new_pc;
+            mmu.tick(); // Not sure where to call the last tick
         }
-        2
     }
 
-    fn restart(&mut self, address: u16, mmu: &mut impl Memory) -> u8 {
+    /// Restart pushed pc, and sets pc to address
+    ///
+    /// Takes 3 M-cycles
+    fn restart(&mut self, address: u16, mmu: &mut impl Memory) {
         self.push(self.pc, mmu);
         self.pc = address;
-        4
     }
 
+    // TODO - is this supposed to return 5 cycles always?
     fn interrupt_service_routine(&mut self, mmu: &mut impl Memory) -> u8 {
         if !self.ime {
             trace!("interrupt service routine called but ime is false");
             return 0;
         }
-        let if_reg = mmu.read_byte(IF_FLAG);
-        let ie_reg = mmu.read_byte(IE_FLAG);
+        let if_reg = self.read_byte(mmu, IF_FLAG);
+        let ie_reg = self.read_byte(mmu, IE_FLAG);
         let interrupt = if_reg & ie_reg;
         if interrupt == 0 {
             trace!("interrupt service routine called but no interrupts are enabled");
@@ -560,25 +612,25 @@ impl CPU {
 
         if interrupt & 0b1 != 0 {
             trace!("vblank interrupt");
-            mmu.write_byte(IF_FLAG, if_reg & 0b11111110);
+            self.write_byte(mmu, IF_FLAG, if_reg & 0b11111110);
             self.pc = 0x40;
             return 4;
         }
 
         if interrupt & 0b10 != 0 {
-            mmu.write_byte(IF_FLAG, if_reg & 0b11111101);
+            self.write_byte(mmu, IF_FLAG, if_reg & 0b11111101);
             self.pc = 0x48;
             return 4;
         }
 
         if interrupt & 0b100 != 0 {
-            mmu.write_byte(IF_FLAG, if_reg & 0b11111011);
+            self.write_byte(mmu, IF_FLAG, if_reg & 0b11111011);
             self.pc = 0x50;
             return 4;
         }
 
         if interrupt & 0b10000 != 0 {
-            mmu.write_byte(IF_FLAG, if_reg & 0b11101111);
+            self.write_byte(mmu, IF_FLAG, if_reg & 0b11101111);
             self.pc = 0x60;
             return 4;
         }
@@ -586,17 +638,15 @@ impl CPU {
         return 0;
     }
 
-    fn load_reg_from_reg(&mut self, to: Register, from: Register) -> u8 {
+    fn load_reg_from_reg(&mut self, to: Register, from: Register) {
         self.registers[to] = self.registers[from];
-        1
     }
 
-    fn load_addr_from_reg(&mut self, addr: u16, reg: Register, mmu: &mut impl Memory) -> u8 {
-        mmu.write_byte(addr, self.registers[reg]);
-        2
+    fn load_addr_from_reg(&mut self, addr: u16, reg: Register, mmu: &mut impl Memory) {
+        self.write_byte(mmu, addr, self.registers[reg]);
     }
 
-    fn load_reg16_from_pc(&mut self, reg: Register16, mmu: &mut impl Memory) -> u8 {
+    fn load_reg16_from_pc(&mut self, reg: Register16, mmu: &mut impl Memory) {
         let value = self.read_u16(self.pc, mmu);
         self.pc += 2;
         match reg {
@@ -606,20 +656,57 @@ impl CPU {
             SP => self.sp = value,
             _ => panic!("Invalid 16-bit register"),
         }
-        3
     }
 
-    fn inc_reg(&mut self, reg: Register) -> u8 {
+    fn inc_reg(&mut self, reg: Register) {
         self.registers[reg] = self.inc_u8_and_set_flags(self.registers[reg]);
-        1
     }
 
-    fn dec_reg(&mut self, reg: Register) -> u8 {
+    /// Increments a 16-bit register and ticks the MMU once. Does not set flags.
+    fn inc_reg16(&mut self, mmu: &mut impl Memory, reg: Register16) {
+        let value = match reg {
+            BC => self.registers.bc(),
+            DE => self.registers.de(),
+            HL => self.registers.hl(),
+            SP => self.sp,
+            _ => panic!("Invalid 16-bit register"),
+        };
+        let new_value = value.wrapping_add(1);
+        match reg {
+            BC => self.registers.set_16(BC, new_value),
+            DE => self.registers.set_16(DE, new_value),
+            HL => self.registers.set_16(HL, new_value),
+            SP => self.sp = new_value,
+            _ => panic!("Invalid 16-bit register"),
+        }
+        mmu.tick();
+    }
+
+    fn dec_reg(&mut self, reg: Register) {
         self.registers[reg] = self.dec_u8_and_set_flags(self.registers[reg]);
-        1
     }
 
-    fn daa(&mut self) -> u8 {
+    /// Decrements a 16-bit register and ticks the MMU once. Does not set flags.
+    fn dec_reg16(&mut self, mmu: &mut impl Memory, reg: Register16) {
+        let value = match reg {
+            BC => self.registers.bc(),
+            DE => self.registers.de(),
+            HL => self.registers.hl(),
+            SP => self.sp,
+            _ => panic!("Invalid 16-bit register"),
+        };
+        let new_value = value.wrapping_sub(1);
+        match reg {
+            BC => self.registers.set_16(BC, new_value),
+            DE => self.registers.set_16(DE, new_value),
+            HL => self.registers.set_16(HL, new_value),
+            SP => self.sp = new_value,
+            _ => panic!("Invalid 16-bit register"),
+        }
+        mmu.tick();
+    }
+
+    fn daa(&mut self) {
         let mut adjustment = 0;
         if self.registers.subtract_flag() {
             if self.registers.half_carry_flag() {
@@ -646,36 +733,28 @@ impl CPU {
             false,
             carry,
         );
-        1
     }
 
-    pub fn execute(&mut self, opcode: u8, mmu: &mut impl Memory) -> u8 {
+    pub fn execute(&mut self, opcode: u8, mmu: &mut impl Memory) {
         match opcode {
-            0x00 => 1,
+            0x00 => {
+                // does this fix the formatting
+                0
+            }
             0x01 => self.load_reg16_from_pc(BC, mmu),
-            0x02 => {
-                mmu.write_byte(self.registers.bc(), self.registers.a);
-                2
-            }
-            0x03 => {
-                let (upper, lower) = self.u16_to_u8s(self.registers.bc().wrapping_add(1));
-                self.registers[B] = upper;
-                self.registers[C] = lower;
-                2
-            }
+            0x02 => self.write_byte(mmu, self.registers.bc(), self.registers.a),
+            0x03 => self.inc_reg16(mmu, BC),
             0x04 => self.inc_reg(B),
             0x05 => self.dec_reg(B),
             0x06 => {
-                self.registers[B] = mmu.read_byte(self.pc);
+                self.registers[B] = self.read_byte(mmu, self.pc);
                 self.pc += 1;
-                2
             }
             0x07 => {
                 self.rlc_reg(A);
                 // always set z to 0, unlike typical rlc
                 self.registers
                     .set_flags(false, false, false, self.registers.carry_flag());
-                1
             }
             0x08 => {
                 let addr = self.read_u16(self.pc, mmu);
@@ -683,134 +762,89 @@ impl CPU {
 
                 let upper = (self.sp >> 8) as u8;
                 let lower = (self.sp & 0x00FF) as u8;
-                mmu.write_byte(addr + 1, upper); // little endian
-                mmu.write_byte(addr, lower);
-                5
+                self.write_byte(mmu, addr + 1, upper); // little endian
+                self.write_byte(mmu, addr, lower);
             }
-            0x09 => self.add_u16_to_hl(self.registers.bc()),
-            0x0A => {
-                self.registers.a = mmu.read_byte(self.registers.bc());
-                2
-            }
-            0x0B => {
-                let (upper, lower) = self.u16_to_u8s(self.registers.bc().wrapping_sub(1));
-                self.registers.b = upper;
-                self.registers.c = lower;
-                2
-            }
+            0x09 => self.add_u16_to_hl(mmu, self.registers.bc()),
+            0x0A => self.registers.a = self.read_byte(mmu, self.registers.bc()),
+            0x0B => self.dec_reg16(mmu, BC),
             0x0C => self.inc_reg(C),
             0x0D => self.dec_reg(C),
             0x0E => {
-                self.registers.c = mmu.read_byte(self.pc);
+                self.registers.c = self.read_byte(mmu, self.pc);
                 self.pc += 1;
-                2
             }
             0x0F => {
                 self.rrc_reg(A);
                 // always set z to 0, unlike typical rrc
                 self.registers
                     .set_flags(false, false, false, self.registers.carry_flag());
-                1
             }
-            0x10 => {
-                self.halt();
-                1
-            }
+            0x10 => self.halt(), // Should be STOP
             0x11 => self.load_reg16_from_pc(DE, mmu),
-            0x12 => {
-                mmu.write_byte(self.registers.de(), self.registers.a);
-                2
-            }
-            0x13 => {
-                let (upper, lower) = self.u16_to_u8s(self.registers.de().wrapping_add(1));
-                self.registers.d = upper;
-                self.registers.e = lower;
-                2
-            }
+            0x12 => self.write_byte(mmu, self.registers.de(), self.registers.a),
+            0x13 => self.inc_reg16(mmu, DE),
             0x14 => self.inc_reg(D),
             0x15 => self.dec_reg(D),
             0x16 => {
-                self.registers.d = mmu.read_byte(self.pc);
+                self.registers.d = self.read_byte(mmu, self.pc);
                 self.pc += 1;
-                2
             }
             0x17 => {
                 let old_carry = if self.registers.carry_flag() { 1 } else { 0 };
                 let new_carry = self.registers.a & 0b10000000 > 0;
                 self.registers.a = (self.registers.a << 1) + old_carry;
                 self.registers.set_flags(false, false, false, new_carry);
-                1
             }
+
             0x18 => self.jump_relative(true, mmu),
-            0x19 => self.add_u16_to_hl(self.registers.de()),
-            0x1A => {
-                self.registers.a = mmu.read_byte(self.registers.de());
-                2
-            }
-            0x1B => {
-                let (upper, lower) = self.u16_to_u8s(self.registers.de().wrapping_sub(1));
-                self.registers.d = upper;
-                self.registers.e = lower;
-                2
-            }
+            0x19 => self.add_u16_to_hl(mmu, self.registers.de()),
+            0x1A => self.registers.a = self.read_byte(mmu, self.registers.de()),
+            0x1B => self.dec_reg16(mmu, DE),
             0x1C => self.inc_reg(E),
             0x1D => self.dec_reg(E),
             0x1E => {
-                self.registers.e = mmu.read_byte(self.pc);
+                self.registers.e = self.read_byte(mmu, self.pc);
                 self.pc += 1;
-                2
             }
             0x1F => {
                 let old_carry = if self.registers.carry_flag() { 1 } else { 0 };
                 let new_carry = self.registers.a & 1 > 0;
                 self.registers.a = (self.registers.a >> 1) + (old_carry << 7);
                 self.registers.set_flags(false, false, false, new_carry);
-                1
             }
+
             0x20 => self.jump_relative(!self.registers.zero_flag(), mmu),
             0x21 => self.load_reg16_from_pc(HL, mmu),
             0x22 => {
-                mmu.write_byte(self.registers.hl(), self.registers.a);
+                self.write_byte(mmu, self.registers.hl(), self.registers.a);
                 let new_hl = self.registers.hl().wrapping_add(1);
                 self.registers.h = (new_hl >> 8) as u8;
                 self.registers.l = (new_hl & 0x00FF) as u8;
-                2
             }
-            0x23 => {
-                let (upper, lower) = self.u16_to_u8s(self.registers.hl().wrapping_add(1));
-                self.registers.h = upper;
-                self.registers.l = lower;
-                2
-            }
+            0x23 => self.inc_reg16(mmu, HL),
             0x24 => self.inc_reg(H),
             0x25 => self.dec_reg(H),
             0x26 => {
-                self.registers.h = mmu.read_byte(self.pc);
+                self.registers.h = self.read_byte(mmu, self.pc);
                 self.pc += 1;
-                2
             }
             0x27 => self.daa(),
+
             0x28 => self.jump_relative(self.registers.zero_flag(), mmu),
-            0x29 => self.add_u16_to_hl(self.registers.hl()),
+            0x29 => self.add_u16_to_hl(mmu, self.registers.hl()),
             0x2A => {
-                self.registers.a = mmu.read_byte(self.registers.hl());
+                self.registers.a = self.read_byte(mmu, self.registers.hl());
                 let new_hl = self.registers.hl().wrapping_add(1);
                 self.registers.h = (new_hl >> 8) as u8;
                 self.registers.l = (new_hl & 0x00FF) as u8;
-                2
             }
-            0x2B => {
-                let (upper, lower) = self.u16_to_u8s(self.registers.hl().wrapping_sub(1));
-                self.registers.h = upper;
-                self.registers.l = lower;
-                2
-            }
+            0x2B => self.dec_reg16(mmu, HL),
             0x2C => self.inc_reg(L),
             0x2D => self.dec_reg(L),
             0x2E => {
-                self.registers.l = mmu.read_byte(self.pc);
+                self.registers.l = self.read_byte(mmu, self.pc);
                 self.pc += 1;
-                2
             }
             0x2F => {
                 self.registers.a = !self.registers.a;
@@ -820,84 +854,66 @@ impl CPU {
                     true,
                     self.registers.carry_flag(),
                 );
-                1
             }
+
             0x30 => self.jump_relative(!self.registers.carry_flag(), mmu),
             0x31 => self.load_reg16_from_pc(SP, mmu),
             0x32 => {
-                mmu.write_byte(self.registers.hl(), self.registers.a);
+                self.write_byte(mmu, self.registers.hl(), self.registers.a);
                 let new_hl = self.registers.hl().wrapping_sub(1);
                 self.registers.h = (new_hl >> 8) as u8;
                 self.registers.l = (new_hl & 0x00FF) as u8;
-                2
             }
-            0x33 => {
-                self.sp = self.sp.wrapping_add(1);
-                2
-            }
+            0x33 => self.inc_reg16(mmu, SP),
             0x34 => {
-                let value = mmu.read_byte(self.registers.hl());
+                let value = self.read_byte(mmu, self.registers.hl());
                 let new_value = self.inc_u8_and_set_flags(value);
-                mmu.write_byte(self.registers.hl(), new_value);
-                3
+                self.write_byte(mmu, self.registers.hl(), new_value);
             }
             0x35 => {
-                let value = mmu.read_byte(self.registers.hl());
+                let value = self.read_byte(mmu, self.registers.hl());
                 let new_value = self.dec_u8_and_set_flags(value);
-                mmu.write_byte(self.registers.hl(), new_value);
-                3
+                self.write_byte(mmu, self.registers.hl(), new_value);
             }
             0x36 => {
-                let value = mmu.read_byte(self.pc);
+                let value = self.read_byte(mmu, self.pc);
                 self.pc += 1;
-                mmu.write_byte(self.registers.hl(), value);
-                3
+                self.write_byte(mmu, self.registers.hl(), value);
             }
             0x37 => {
                 self.registers
                     .set_flags(self.registers.zero_flag(), false, false, true);
-                1
             }
+
             0x38 => self.jump_relative(self.registers.carry_flag(), mmu),
-            0x39 => self.add_u16_to_hl(self.sp),
+            0x39 => self.add_u16_to_hl(mmu, self.sp),
             0x3A => {
-                self.registers.a = mmu.read_byte(self.registers.hl());
+                self.registers.a = self.read_byte(mmu, self.registers.hl());
                 let new_hl = self.registers.hl().wrapping_sub(1);
-                let (upper, lower) = self.u16_to_u8s(new_hl);
-                self.registers.h = upper;
-                self.registers.l = lower;
-                2
+                self.registers.h = (new_hl >> 8) as u8;
+                self.registers.l = (new_hl & 0x00FF) as u8;
             }
-            0x3B => {
-                self.sp = self.sp.wrapping_sub(1);
-                2
-            }
+            0x3B => self.dec_reg16(mmu, SP),
             0x3C => self.inc_reg(A),
             0x3D => self.dec_reg(A),
             0x3E => {
-                self.registers.a = mmu.read_byte(self.pc);
+                self.registers.a = self.read_byte(mmu, self.pc);
                 self.pc += 1;
-                2
             }
-            0x3F => {
-                self.registers.set_flags(
-                    self.registers.zero_flag(),
-                    false,
-                    false,
-                    !self.registers.carry_flag(),
-                );
-                1
-            }
+            0x3F => self.registers.set_flags(
+                self.registers.zero_flag(),
+                false,
+                false,
+                !self.registers.carry_flag(),
+            ),
+
             0x40 => self.load_reg_from_reg(B, B),
             0x41 => self.load_reg_from_reg(B, C),
             0x42 => self.load_reg_from_reg(B, D),
             0x43 => self.load_reg_from_reg(B, E),
             0x44 => self.load_reg_from_reg(B, H),
             0x45 => self.load_reg_from_reg(B, L),
-            0x46 => {
-                self.registers[B] = mmu.read_byte(self.registers.hl());
-                2
-            }
+            0x46 => self.registers[B] = self.read_byte(mmu, self.registers.hl()),
             0x47 => self.load_reg_from_reg(B, A),
 
             0x48 => self.load_reg_from_reg(C, B),
@@ -906,10 +922,7 @@ impl CPU {
             0x4B => self.load_reg_from_reg(C, E),
             0x4C => self.load_reg_from_reg(C, H),
             0x4D => self.load_reg_from_reg(C, L),
-            0x4E => {
-                self.registers[C] = mmu.read_byte(self.registers.hl());
-                2
-            }
+            0x4E => self.registers[C] = self.read_byte(mmu, self.registers.hl()),
             0x4F => self.load_reg_from_reg(C, A),
 
             0x50 => self.load_reg_from_reg(D, B),
@@ -918,10 +931,7 @@ impl CPU {
             0x53 => self.load_reg_from_reg(D, E),
             0x54 => self.load_reg_from_reg(D, H),
             0x55 => self.load_reg_from_reg(D, L),
-            0x56 => {
-                self.registers[D] = mmu.read_byte(self.registers.hl());
-                2
-            }
+            0x56 => self.registers[D] = self.read_byte(mmu, self.registers.hl()),
             0x57 => self.load_reg_from_reg(D, A),
 
             0x58 => self.load_reg_from_reg(E, B),
@@ -930,10 +940,7 @@ impl CPU {
             0x5B => self.load_reg_from_reg(E, E),
             0x5C => self.load_reg_from_reg(E, H),
             0x5D => self.load_reg_from_reg(E, L),
-            0x5E => {
-                self.registers[E] = mmu.read_byte(self.registers.hl());
-                2
-            }
+            0x5E => self.registers[E] = self.read_byte(mmu, self.registers.hl()),
             0x5F => self.load_reg_from_reg(E, A),
 
             0x60 => self.load_reg_from_reg(H, B),
@@ -942,10 +949,7 @@ impl CPU {
             0x63 => self.load_reg_from_reg(H, E),
             0x64 => self.load_reg_from_reg(H, H),
             0x65 => self.load_reg_from_reg(H, L),
-            0x66 => {
-                self.registers[H] = mmu.read_byte(self.registers.hl());
-                2
-            }
+            0x66 => self.registers[H] = self.read_byte(mmu, self.registers.hl()),
             0x67 => self.load_reg_from_reg(H, A),
 
             0x68 => self.load_reg_from_reg(L, B),
@@ -954,41 +958,17 @@ impl CPU {
             0x6B => self.load_reg_from_reg(L, E),
             0x6C => self.load_reg_from_reg(L, H),
             0x6D => self.load_reg_from_reg(L, L),
-            0x6E => {
-                self.registers[L] = mmu.read_byte(self.registers.hl());
-                2
-            }
+            0x6E => self.registers[L] = self.read_byte(mmu, self.registers.hl()),
             0x6F => self.load_reg_from_reg(L, A),
 
             0x70 => self.load_addr_from_reg(self.registers.hl(), B, mmu),
-            0x71 => {
-                mmu.write_byte(self.registers.hl(), self.registers.c);
-                2
-            }
-            0x72 => {
-                mmu.write_byte(self.registers.hl(), self.registers.d);
-                2
-            }
-            0x73 => {
-                mmu.write_byte(self.registers.hl(), self.registers.e);
-                2
-            }
-            0x74 => {
-                mmu.write_byte(self.registers.hl(), self.registers.h);
-                2
-            }
-            0x75 => {
-                mmu.write_byte(self.registers.hl(), self.registers.l);
-                2
-            }
-            0x76 => {
-                self.halt();
-                1
-            }
-            0x77 => {
-                mmu.write_byte(self.registers.hl(), self.registers.a);
-                2
-            }
+            0x71 => self.load_addr_from_reg(self.registers.hl(), C, mmu),
+            0x72 => self.load_addr_from_reg(self.registers.hl(), D, mmu),
+            0x73 => self.load_addr_from_reg(self.registers.hl(), E, mmu),
+            0x74 => self.load_addr_from_reg(self.registers.hl(), H, mmu),
+            0x75 => self.load_addr_from_reg(self.registers.hl(), L, mmu),
+            0x76 => self.halt(),
+            0x77 => self.load_addr_from_reg(self.registers.hl(), A, mmu),
 
             0x78 => self.load_reg_from_reg(A, B),
             0x79 => self.load_reg_from_reg(A, C),
@@ -996,10 +976,7 @@ impl CPU {
             0x7B => self.load_reg_from_reg(A, E),
             0x7C => self.load_reg_from_reg(A, H),
             0x7D => self.load_reg_from_reg(A, L),
-            0x7E => {
-                self.registers.a = mmu.read_byte(self.registers.hl());
-                2
-            }
+            0x7E => self.registers[A] = self.read_byte(mmu, self.registers.hl()),
             0x7F => self.load_reg_from_reg(A, A),
 
             0x80 => self.add_a(self.registers.b),
@@ -1008,11 +985,7 @@ impl CPU {
             0x83 => self.add_a(self.registers.e),
             0x84 => self.add_a(self.registers.h),
             0x85 => self.add_a(self.registers.l),
-            0x86 => {
-                let value = mmu.read_byte(self.registers.hl());
-                self.add_a(value);
-                2
-            }
+            0x86 => self.add_a(self.read_byte(mmu, self.registers.hl())),
             0x87 => self.add_a(self.registers.a),
 
             0x88 => self.add_carry_a(self.registers.b),
@@ -1021,21 +994,16 @@ impl CPU {
             0x8B => self.add_carry_a(self.registers.e),
             0x8C => self.add_carry_a(self.registers.h),
             0x8D => self.add_carry_a(self.registers.l),
-            0x8E => {
-                self.add_carry_a(mmu.read_byte(self.registers.hl()));
-                2
-            }
+            0x8E => self.add_carry_a(self.read_byte(mmu, self.registers.hl())),
             0x8F => self.add_carry_a(self.registers.a),
+
             0x90 => self.sub_a(self.registers.b),
             0x91 => self.sub_a(self.registers.c),
             0x92 => self.sub_a(self.registers.d),
             0x93 => self.sub_a(self.registers.e),
             0x94 => self.sub_a(self.registers.h),
             0x95 => self.sub_a(self.registers.l),
-            0x96 => {
-                self.sub_a(mmu.read_byte(self.registers.hl()));
-                2
-            }
+            0x96 => self.sub_a(self.read_byte(mmu, self.registers.hl())),
             0x97 => self.sub_a(self.registers.a),
 
             0x98 => self.sub_carry_a(self.registers.b),
@@ -1044,10 +1012,7 @@ impl CPU {
             0x9B => self.sub_carry_a(self.registers.e),
             0x9C => self.sub_carry_a(self.registers.h),
             0x9D => self.sub_carry_a(self.registers.l),
-            0x9E => {
-                self.sub_carry_a(mmu.read_byte(self.registers.hl()));
-                2
-            }
+            0x9E => self.sub_carry_a(self.read_byte(mmu, self.registers.hl())),
             0x9F => self.sub_carry_a(self.registers.a),
 
             0xA0 => self.and_a(self.registers.b),
@@ -1056,10 +1021,7 @@ impl CPU {
             0xA3 => self.and_a(self.registers.e),
             0xA4 => self.and_a(self.registers.h),
             0xA5 => self.and_a(self.registers.l),
-            0xA6 => {
-                self.and_a(mmu.read_byte(self.registers.hl()));
-                2
-            }
+            0xA6 => self.and_a(self.read_byte(mmu, self.registers.hl())),
             0xA7 => self.and_a(self.registers.a),
 
             0xA8 => self.xor_a(self.registers.b),
@@ -1068,10 +1030,7 @@ impl CPU {
             0xAB => self.xor_a(self.registers.e),
             0xAC => self.xor_a(self.registers.h),
             0xAD => self.xor_a(self.registers.l),
-            0xAE => {
-                self.xor_a(mmu.read_byte(self.registers.hl()));
-                2
-            }
+            0xAE => self.xor_a(self.read_byte(mmu, self.registers.hl())),
             0xAF => self.xor_a(self.registers.a),
 
             0xB0 => self.or_a(self.registers.b),
@@ -1080,10 +1039,7 @@ impl CPU {
             0xB3 => self.or_a(self.registers.e),
             0xB4 => self.or_a(self.registers.h),
             0xB5 => self.or_a(self.registers.l),
-            0xB6 => {
-                self.or_a(mmu.read_byte(self.registers.hl()));
-                2
-            }
+            0xB6 => self.or_a(self.read_byte(mmu, self.registers.hl())),
             0xB7 => self.or_a(self.registers.a),
 
             0xB8 => self.cp_a(self.registers.b),
@@ -1092,52 +1048,44 @@ impl CPU {
             0xBB => self.cp_a(self.registers.e),
             0xBC => self.cp_a(self.registers.h),
             0xBD => self.cp_a(self.registers.l),
-            0xBE => {
-                self.cp_a(mmu.read_byte(self.registers.hl()));
-                2
-            }
+            0xBE => self.cp_a(self.read_byte(mmu, self.registers.hl())),
             0xBF => self.cp_a(self.registers.a),
 
-            0xC0 => self.ret(!self.registers.zero_flag(), mmu),
+            0xC0 => self.ret_cc(!self.registers.zero_flag(), mmu),
             0xC1 => {
                 let (upper, lower) = self.pop(mmu);
                 self.registers.b = upper;
                 self.registers.c = lower;
-                3
             }
             0xC2 => self.jump_abs(!self.registers.zero_flag(), mmu),
             0xC3 => self.jump_abs(true, mmu),
             0xC4 => self.call(!self.registers.zero_flag(), mmu),
             0xC5 => self.push(self.registers.bc(), mmu),
             0xC6 => {
-                let value = mmu.read_byte(self.pc);
+                let value = self.read_byte(mmu, self.pc);
                 self.pc += 1;
                 self.add_a(value);
-                2
             }
             0xC7 => self.restart(0, mmu),
-            0xC8 => self.ret(self.registers.zero_flag(), mmu),
-            0xC9 => {
-                self.ret(true, mmu);
-                4
-            }
+
+            0xC8 => self.ret_cc(self.registers.zero_flag(), mmu),
+            0xC9 => self.ret(mmu),
             0xCA => self.jump_abs(self.registers.zero_flag(), mmu),
             0xCB => self.execute_cb_opcodes(mmu), // Other opcode sheet
             0xCC => self.call(self.registers.zero_flag(), mmu),
             0xCD => self.call(true, mmu),
             0xCE => {
-                let value = mmu.read_byte(self.pc);
+                let value = self.read_byte(mmu, self.pc);
                 self.pc += 1;
                 self.add_carry_a(value);
-                2
             }
             0xCF => self.restart(0x08, mmu),
-            0xD0 => self.ret(!self.registers.carry_flag(), mmu),
+
+            0xD0 => self.ret_cc(!self.registers.carry_flag(), mmu),
             0xD1 => {
                 let (upper, lower) = self.pop(mmu);
                 self.registers.d = upper;
                 self.registers.e = lower;
-                3
             }
             0xD2 => self.jump_abs(!self.registers.carry_flag(), mmu),
             0xD3 => {
@@ -1146,17 +1094,17 @@ impl CPU {
             0xD4 => self.call(!self.registers.carry_flag(), mmu),
             0xD5 => self.push(self.registers.de(), mmu),
             0xD6 => {
-                let value = mmu.read_byte(self.pc);
+                let value = self.read_byte(mmu, self.pc);
                 self.pc += 1;
                 self.sub_a(value);
-                2
             }
             0xD7 => self.restart(0x10, mmu),
-            0xD8 => self.ret(self.registers.carry_flag(), mmu),
+
+            0xD8 => self.ret_cc(self.registers.carry_flag(), mmu),
             0xD9 => {
-                self.ime = true;
-                self.ret(true, mmu);
-                4
+                self.ret(mmu);
+                self.ime = true; // Set IME after the RET
+                                 // Not sure if it should be on next CPU step though
             }
             0xDA => self.jump_abs(self.registers.carry_flag(), mmu),
             0xDB => {
@@ -1167,29 +1115,26 @@ impl CPU {
                 panic!("Unsupported OPCODE 0xDD")
             }
             0xDE => {
-                let value = mmu.read_byte(self.pc);
+                let value = self.read_byte(mmu, self.pc);
                 self.pc += 1;
                 self.sub_carry_a(value);
-                2
             }
             0xDF => self.restart(0x18, mmu),
+
             0xE0 => {
-                let address = 0xFF00 + mmu.read_byte(self.pc) as u16;
+                let address = 0xFF00 + self.read_byte(mmu, self.pc) as u16;
                 self.pc += 1;
                 trace!("Writing {} to 0x{:4X}", self.registers.a, address);
-                mmu.write_byte(address, self.registers.a);
-                3
+                self.write_byte(mmu, address, self.registers.a);
             }
             0xE1 => {
                 let (upper, lower) = self.pop(mmu);
                 self.registers.h = upper;
                 self.registers.l = lower;
-                3
             }
             0xE2 => {
                 let address = 0xFF00 + self.registers.c as u16;
-                mmu.write_byte(address, self.registers.a);
-                2
+                self.write_byte(mmu, address, self.registers.a);
             }
             0xE3 => {
                 panic!("Unsupported OPCODE 0xE3")
@@ -1199,32 +1144,33 @@ impl CPU {
             }
             0xE5 => self.push(self.registers.hl(), mmu),
             0xE6 => {
-                let value = mmu.read_byte(self.pc);
+                let value = self.read_byte(mmu, self.pc);
                 self.pc += 1;
                 self.and_a(value);
-                2
             }
             0xE7 => self.restart(0x20, mmu),
+
             0xE8 => {
                 // Offset is signed 8-bit. Read it as signed, then expand it to 16 bit
-                let offset = mmu.read_byte(self.pc) as i8 as i16;
+                let offset = self.read_byte(mmu, self.pc) as i8 as i16;
                 let old_sp = self.sp;
                 self.pc += 1;
+                mmu.tick();
+
                 self.sp = self.sp.wrapping_add(offset as u16);
+                // TODO - where to put ticks? One after incrementing pc,
+                // and one after updating sp?
+                mmu.tick();
+
                 let half_carry = (old_sp & 0x0F) + (offset as u16 & 0x0F) > 0x0F;
                 let carry = (old_sp & 0xFF) + (offset as u16 & 0xFF) > 0xFF;
                 self.registers.set_flags(false, false, half_carry, carry);
-                4
             }
-            0xE9 => {
-                self.pc = self.registers.hl();
-                1
-            }
+            0xE9 => self.pc = self.registers.hl(),
             0xEA => {
                 let address = self.read_u16(self.pc, mmu);
                 self.pc += 2;
-                mmu.write_byte(address, self.registers.a);
-                4
+                self.write_byte(mmu, address, self.registers.a);
             }
             0xEB => {
                 panic!("Unsupported OPCODE 0xEB")
@@ -1236,74 +1182,66 @@ impl CPU {
                 panic!("Unsupported OPCODE 0xED")
             }
             0xEE => {
-                let value = mmu.read_byte(self.pc);
+                let value = self.read_byte(mmu, self.pc);
                 self.pc += 1;
                 self.xor_a(value);
-                2
             }
             0xEF => self.restart(0x28, mmu),
+
             0xF0 => {
-                let address = 0xFF00 + mmu.read_byte(self.pc) as u16;
+                let address = 0xFF00 + self.read_byte(mmu, self.pc) as u16;
                 trace!("Reading from 0x{:4X}", address);
                 self.pc += 1;
-                self.registers.a = mmu.read_byte(address);
-                3
+                self.registers.a = self.read_byte(mmu, address);
             }
             0xF1 => {
                 let (upper, lower) = self.pop(mmu);
                 self.registers.a = upper;
                 self.registers.f = lower & 0b11110000;
-                3
             }
             0xF2 => {
                 let address = 0xFF00 + self.registers.c as u16;
-                self.registers.a = mmu.read_byte(address);
-                2
+                self.registers.a = self.read_byte(mmu, address);
             }
-            0xF3 => {
-                self.ime = false;
-                1
-            }
+            0xF3 => self.ime = false,
             0xF4 => {
                 panic!("Unsupported OPCODE 0xF4")
             }
             0xF5 => self.push(self.registers.af(), mmu),
             0xF6 => {
-                let value = mmu.read_byte(self.pc);
+                let value = self.read_byte(mmu, self.pc);
                 self.pc += 1;
                 self.or_a(value);
-                2
             }
             0xF7 => self.restart(0x30, mmu),
+
             0xF8 => {
                 // Offset is signed 8-bit. Read it as signed, then expand it to 16 bit
-                let offset = mmu.read_byte(self.pc) as i8 as i16;
+                let offset = self.read_byte(mmu, self.pc) as i8 as i16;
                 let old_sp = self.sp;
                 self.pc += 1;
                 let value = self.sp.wrapping_add(offset as u16);
-                let (upper, lower) = self.u16_to_u8s(value);
+                // TODO - where to put tick? After incrememnting sp or pc?
+                mmu.tick();
 
+                let (upper, lower) = self.u16_to_u8s(value);
                 let half_carry = (old_sp & 0x0F) + (offset as u16 & 0x0F) > 0x0F;
                 let carry = (old_sp & 0xFF) + (offset as u16 & 0xFF) > 0xFF;
                 self.registers.h = upper;
                 self.registers.l = lower;
                 self.registers.set_flags(false, false, half_carry, carry);
-                3
             }
             0xF9 => {
-                self.sp = self.registers.hl();
-                2
+                let hl = self.registers.hl();
+                mmu.tick();
+                self.sp = hl;
             }
             0xFA => {
                 let address = self.read_u16(self.pc, mmu);
                 self.pc += 2;
-                self.registers.a = mmu.read_byte(address);
-                4
+                self.registers.a = self.read_byte(mmu, address);
             }
-            0xFB => {
-                self.ime = true;
-                1
-            }
+            0xFB => self.ime = true, // TODO, this needs to be set after instruction
             0xFC => {
                 panic!("Unsupported OPCODE 0xFC")
             }
@@ -1311,18 +1249,17 @@ impl CPU {
                 panic!("Unsupported OPCODE 0xFD")
             }
             0xFE => {
-                let value = mmu.read_byte(self.pc);
+                let value = self.read_byte(mmu, self.pc);
                 self.pc += 1;
                 trace!("Comparing A {} to {}", self.registers.a, value);
                 self.cp_a(value);
-                2
             }
             0xFF => self.restart(0x38, mmu),
         }
     }
 
-    fn execute_cb_opcodes(&mut self, mmu: &mut impl Memory) -> u8 {
-        let opcode = mmu.read_byte(self.pc);
+    fn execute_cb_opcodes(&mut self, mmu: &mut impl Memory) {
+        let opcode = self.read_byte(mmu, self.pc);
         self.pc += 1;
 
         match opcode {
@@ -1847,17 +1784,15 @@ mod tests {
         cpu.sp = 0;
         mmu.memory[0x0000] = 0xCD;
         mmu.memory[0x0001] = 0xAB;
-        let cycles = cpu.ret(true, &mut mmu);
+        cpu.ret(&mut mmu);
         assert_eq!(cpu.pc, 0xABCD);
-        assert_eq!(cycles, 5);
 
         cpu.pc = 0;
         cpu.sp = 0;
         mmu.memory[0x0000] = 0xCD;
         mmu.memory[0x0001] = 0xAB;
-        let cycles = cpu.ret(false, &mut mmu);
+        cpu.ret(&mut mmu);
         assert_eq!(cpu.pc, 0);
-        assert_eq!(cycles, 2);
     }
 
     #[test]
@@ -2133,7 +2068,6 @@ mod tests {
         let cycles = cpu.execute(0x38, &mut mmu);
 
         assert_eq!(cpu.pc, 0x11);
-        assert_eq!(cycles, 3);
     }
 
     #[test]
@@ -2185,7 +2119,6 @@ mod tests {
         let cycles = cpu.execute(0x30, &mut mmu);
 
         assert_eq!(cpu.pc, 0x11);
-        assert_eq!(cycles, 3);
     }
 
     #[test]
@@ -2276,7 +2209,6 @@ mod tests {
         mmu.memory[cpu.pc as usize] = 0x10;
         let cycles = cpu.execute(0x28, &mut mmu);
         assert_eq!(cpu.pc, 0x11);
-        assert_eq!(cycles, 3);
     }
 
     #[test]
@@ -2335,7 +2267,6 @@ mod tests {
         let cycles = cpu.execute(0x20, &mut mmu);
 
         assert_eq!(cpu.pc, 0x11);
-        assert_eq!(cycles, 3);
     }
 
     #[test]
@@ -2512,7 +2443,7 @@ mod tests {
 
         cpu.registers.l = 0xFF;
         cpu.pc = 0x0100;
-        mmu.write_byte(0x0100, 0xAB);
+        write_byte(0x0100, 0xAB);
 
         cpu.execute(0x2E, &mut mmu);
 
@@ -2521,7 +2452,7 @@ mod tests {
 
         cpu.registers.h = 0xFF;
         cpu.pc = 0x0100;
-        mmu.write_byte(0x0100, 0xAB);
+        write_byte(0x0100, 0xAB);
 
         cpu.execute(0x26, &mut mmu);
 
@@ -3065,23 +2996,20 @@ mod tests {
         let (mut cpu, mut mmu) = get_cpu_and_mmu();
 
         cpu.pc = 0;
-        let cycles = cpu.jump_abs(false, &mut mmu);
+        cpu.jump_abs(false, &mut mmu);
         assert_eq!(cpu.pc, 2);
-        assert_eq!(cycles, 3);
 
         cpu.pc = 0;
         mmu.memory[cpu.pc as usize] = 0xCD;
         mmu.memory[1 + cpu.pc as usize] = 0xAB;
-        let cycles = cpu.jump_abs(true, &mut mmu);
+        cpu.jump_abs(true, &mut mmu);
         assert_eq!(cpu.pc, 0xABCD);
-        assert_eq!(cycles, 4);
 
         cpu.pc = 0;
         mmu.memory[cpu.pc as usize] = 0xFF;
         mmu.memory[1 + cpu.pc as usize] = 0xFF;
-        let cycles = cpu.jump_abs(true, &mut mmu);
+        cpu.jump_abs(true, &mut mmu);
         assert_eq!(cpu.pc, 0xFFFF);
-        assert_eq!(cycles, 4);
     }
 
     #[test]
@@ -3089,21 +3017,18 @@ mod tests {
         let (mut cpu, mut mmu) = get_cpu_and_mmu();
 
         cpu.pc = 0;
-        let cycles = cpu.jump_relative(false, &mut mmu);
+        cpu.jump_relative(false, &mut mmu);
         assert_eq!(cpu.pc, 1);
-        assert_eq!(cycles, 2);
 
         cpu.pc = 0;
         mmu.memory[cpu.pc as usize] = 0x10;
-        let cycles = cpu.jump_relative(true, &mut mmu);
+        cpu.jump_relative(true, &mut mmu);
         assert_eq!(cpu.pc, 0x11);
-        assert_eq!(cycles, 3);
 
         cpu.pc = 0x10;
         mmu.memory[cpu.pc as usize] = (-0x10 as i8) as u8;
-        let cycles = cpu.jump_relative(true, &mut mmu);
+        cpu.jump_relative(true, &mut mmu);
         assert_eq!(cpu.pc, 1);
-        assert_eq!(cycles, 3);
     }
 
     #[track_caller]

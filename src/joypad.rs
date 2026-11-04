@@ -25,7 +25,7 @@ impl Joypad {
         }
     }
 
-    pub fn step(&mut self) {
+    pub fn tick(&mut self) {
         //self.interrupt = true;
     }
 }

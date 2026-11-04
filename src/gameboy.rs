@@ -20,8 +20,7 @@ impl Gameboy {
     pub fn run(&mut self) {
         let mut booting = self.mmu.boot_rom_active();
         loop {
-            let cycles = self.cpu.step(&mut self.mmu);
-            self.mmu.step(cycles);
+            self.cpu.step(&mut self.mmu);
 
             if booting && !self.mmu.boot_rom_active() {
                 booting = false;

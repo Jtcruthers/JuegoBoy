@@ -15,8 +15,8 @@ impl PPU {
         }
     }
 
-    pub fn step(&mut self, cycles: u8) {
-        self.cycles += cycles as u64;
+    pub fn tick(&mut self) {
+        self.cycles += 1;
         if self.cycles > 114 * 153 {
             self.cycles -= 114 * 153;
         }
