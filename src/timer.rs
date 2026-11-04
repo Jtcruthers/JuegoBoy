@@ -8,11 +8,11 @@ enum Frequency {
 }
 
 pub struct Timer {
-    div: u16,
-    div_cycles: u8,
+    system_counter: u16, // div is the upper byte
     tima: u8,
     tima_cycles: u64,
     tma: u8,
+    previous_tma: u8,
     tac: Frequency,
     enabled: bool,
     pub interrupt: bool,
@@ -21,11 +21,11 @@ pub struct Timer {
 impl Timer {
     pub fn new() -> Self {
         Timer {
-            div: 0,
-            div_cycles: 0,
+            system_counter: 0,
             tima: 0,
             tima_cycles: 0,
             tma: 0,
+            previous_tma: 0,
             tac: Frequency::Hz4096,
             enabled: true,
             interrupt: false,
@@ -33,17 +33,15 @@ impl Timer {
     }
 
     pub fn step(&mut self, cycles: u8) {
-        if self.div_cycles.checked_add(cycles).is_none() {
-            self.div = self.div.wrapping_add(1);
-        }
-        self.div_cycles = self.div_cycles.wrapping_add(cycles);
+        // counter increments on t-cycles, but we use m-cycles
+        self.system_counter = self.system_counter.wrapping_add(cycles as u16 * 4);
 
         if self.enabled {
             let max_cycles = match self.tac {
-                Frequency::Hz4096 => 1024,
-                Frequency::Hz262144 => 16,
-                Frequency::Hz65536 => 64,
-                Frequency::Hz16384 => 256,
+                Frequency::Hz4096 => 256,
+                Frequency::Hz262144 => 4,
+                Frequency::Hz65536 => 16,
+                Frequency::Hz16384 => 64,
             };
 
             if self.tima_cycles > max_cycles {
@@ -51,18 +49,28 @@ impl Timer {
                 self.tima = self.tima.wrapping_add(1);
 
                 if self.tima == 0 {
-                    self.tima = self.tma;
+                    // When tima overflows, reset to vlaue in TMA and request interrupt
+                    self.tima = self.previous_tma;
                     self.interrupt = true;
                 }
             }
         }
+
+        // After ticking, the previous tma is no longer needed, so reset it to tma
+        // This way, if a tma write is executed on same m-cycle as content of tma is transffered to
+        // tima, the old value is used
+        self.previous_tma = self.tma;
+    }
+
+    fn div(&self) -> u8 {
+        (self.system_counter >> 8) as u8
     }
 }
 
 impl Memory for Timer {
     fn read_byte(&self, address: u16) -> u8 {
         match address {
-            0xFF04 => ((self.div >> 8) & 0xFF) as u8,
+            0xFF04 => self.div(),
             0xFF05 => self.tima,
             0xFF06 => self.tma,
             0xFF07 => {
@@ -83,9 +91,9 @@ impl Memory for Timer {
 
     fn write_byte(&mut self, address: u16, value: u8) {
         match address {
-            0xFF04 => self.div &= 0x00FF,
+            0xFF04 => self.system_counter &= 0x00FF,
             0xFF05 => (),
-            0xFF06 => (),
+            0xFF06 => self.tma = value,
             0xFF07 => {
                 self.tac = match value & 0b11 {
                     0b00 => Frequency::Hz4096,
@@ -110,10 +118,10 @@ mod tests {
     fn test_inc_div() {
         let mut timer = Timer::new();
         timer.step(1);
-        assert_eq!(timer.div, 0);
+        assert_eq!(timer.div(), 0);
 
-        timer.step(255);
-        assert_eq!(timer.div, 1);
+        timer.step(63);
+        assert_eq!(timer.div(), 1);
     }
 
     #[test]
@@ -121,9 +129,9 @@ mod tests {
         let mut timer = Timer::new();
         timer.enabled = false;
         timer.step(1);
-        assert_eq!(timer.div, 0);
+        assert_eq!(timer.div(), 0);
 
-        timer.step(255);
-        assert_eq!(timer.div, 1);
+        timer.step(63);
+        assert_eq!(timer.div(), 1);
     }
 }
