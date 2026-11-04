@@ -35,7 +35,8 @@ impl Timer {
     pub fn step(&mut self, cycles: u8) {
         // counter increments on t-cycles, but we use m-cycles
         self.system_counter = self.system_counter.wrapping_add(cycles as u16 * 4);
-        self.tima_cycles = self.tima_cycles.wrapping_add(cycles as u64 * 4);
+        // tac uses m-cycles already, so just use cycles directly
+        self.tima_cycles = self.tima_cycles.wrapping_add(cycles as u64);
 
         if self.enabled {
             let max_cycles = match self.tac {

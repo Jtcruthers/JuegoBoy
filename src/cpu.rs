@@ -283,7 +283,7 @@ impl CPU {
     fn bit_hl(&mut self, bit: u8, mmu: &mut impl Memory) -> u8 {
         let value = mmu.read_byte(self.registers.hl());
         self.bit(bit, value);
-        2
+        3
     }
 
     fn res(&mut self, bit: u8, value: u8) -> u8 {
