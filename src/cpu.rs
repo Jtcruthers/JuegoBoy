@@ -819,7 +819,7 @@ impl CPU {
                     true,
                     self.registers.carry_flag(),
                 );
-                4
+                1
             }
             0x30 => self.jump_relative(!self.registers.carry_flag(), mmu),
             0x31 => self.load_reg16_from_pc(SP, mmu),
@@ -850,7 +850,7 @@ impl CPU {
                 let value = mmu.read_byte(self.pc);
                 self.pc += 1;
                 mmu.write_byte(self.registers.hl(), value);
-                2
+                3
             }
             0x37 => {
                 self.registers
@@ -885,7 +885,7 @@ impl CPU {
                     false,
                     !self.registers.carry_flag(),
                 );
-                4
+                1
             }
             0x40 => self.load_reg_from_reg(B, B),
             0x41 => self.load_reg_from_reg(B, C),
@@ -1217,7 +1217,7 @@ impl CPU {
             }
             0xE9 => {
                 self.pc = self.registers.hl();
-                4
+                1
             }
             0xEA => {
                 let address = self.read_u16(self.pc, mmu);
@@ -1597,7 +1597,7 @@ impl CPU {
             0x45 => self.bit_reg(0, L),
             0x46 => {
                 self.bit_hl(0, mmu);
-                4
+                3
             }
             0x47 => self.bit_reg(0, A),
 
@@ -1609,7 +1609,7 @@ impl CPU {
             0x4D => self.bit_reg(1, L),
             0x4E => {
                 self.bit_hl(1, mmu);
-                4
+                3
             }
             0x4F => self.bit_reg(1, A),
 
@@ -1621,7 +1621,7 @@ impl CPU {
             0x55 => self.bit_reg(2, L),
             0x56 => {
                 self.bit_hl(2, mmu);
-                4
+                3
             }
             0x57 => self.bit_reg(2, A),
 
@@ -1633,7 +1633,7 @@ impl CPU {
             0x5D => self.bit_reg(3, L),
             0x5E => {
                 self.bit_hl(3, mmu);
-                4
+                3
             }
             0x5F => self.bit_reg(3, A),
 
@@ -1645,7 +1645,7 @@ impl CPU {
             0x65 => self.bit_reg(4, L),
             0x66 => {
                 self.bit_hl(4, mmu);
-                4
+                3
             }
             0x67 => self.bit_reg(4, A),
 
@@ -1657,7 +1657,7 @@ impl CPU {
             0x6D => self.bit_reg(5, L),
             0x6E => {
                 self.bit_hl(5, mmu);
-                4
+                3
             }
             0x6F => self.bit_reg(5, A),
 
@@ -1669,7 +1669,7 @@ impl CPU {
             0x75 => self.bit_reg(6, L),
             0x76 => {
                 self.bit_hl(6, mmu);
-                4
+                3
             }
             0x77 => self.bit_reg(6, A),
 
@@ -1681,7 +1681,7 @@ impl CPU {
             0x7D => self.bit_reg(7, L),
             0x7E => {
                 self.bit_hl(7, mmu);
-                4
+                3
             }
             0x7F => self.bit_reg(7, A),
 
