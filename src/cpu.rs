@@ -328,8 +328,9 @@ impl CPU {
         new_value
     }
 
-    fn swap_reg(&mut self, reg: Register) {
+    fn swap_reg(&mut self, reg: Register) -> u8 {
         self.registers[reg] = self.swap(self.registers[reg]);
+        2
     }
 
     fn swap_hl(&mut self, mmu: &mut impl Memory) -> u8 {
@@ -1325,269 +1326,77 @@ impl CPU {
         self.pc += 1;
 
         match opcode {
-            0x00 => {
-                self.rlc_reg(B);
-                2
-            }
-            0x01 => {
-                self.rlc_reg(C);
-                2
-            }
-            0x02 => {
-                self.rlc_reg(D);
-                2
-            }
-            0x03 => {
-                self.rlc_reg(E);
-                2
-            }
-            0x04 => {
-                self.rlc_reg(H);
-                2
-            }
-            0x05 => {
-                self.rlc_reg(L);
-                2
-            }
-            0x06 => {
-                self.rlc_hl(mmu);
-                4
-            }
-            0x07 => {
-                self.rlc_reg(A);
-                2
-            }
+            0x00 => self.rlc_reg(B),
+            0x01 => self.rlc_reg(C),
+            0x02 => self.rlc_reg(D),
+            0x03 => self.rlc_reg(E),
+            0x04 => self.rlc_reg(H),
+            0x05 => self.rlc_reg(L),
+            0x06 => self.rlc_hl(mmu),
+            0x07 => self.rlc_reg(A),
 
-            0x08 => {
-                self.rrc_reg(B);
-                2
-            }
-            0x09 => {
-                self.rrc_reg(C);
-                2
-            }
-            0x0A => {
-                self.rrc_reg(D);
-                2
-            }
-            0x0B => {
-                self.rrc_reg(E);
-                2
-            }
-            0x0C => {
-                self.rrc_reg(H);
-                2
-            }
-            0x0D => {
-                self.rrc_reg(L);
-                2
-            }
-            0x0E => {
-                self.rrc_hl(mmu);
-                4
-            }
-            0x0F => {
-                self.rrc_reg(A);
-                2
-            }
+            0x08 => self.rrc_reg(B),
+            0x09 => self.rrc_reg(C),
+            0x0A => self.rrc_reg(D),
+            0x0B => self.rrc_reg(E),
+            0x0C => self.rrc_reg(H),
+            0x0D => self.rrc_reg(L),
+            0x0E => self.rrc_hl(mmu),
+            0x0F => self.rrc_reg(A),
 
-            0x10 => {
-                self.rl_reg(B);
-                2
-            }
-            0x11 => {
-                self.rl_reg(C);
-                2
-            }
-            0x12 => {
-                self.rl_reg(D);
-                2
-            }
-            0x13 => {
-                self.rl_reg(E);
-                2
-            }
-            0x14 => {
-                self.rl_reg(H);
-                2
-            }
-            0x15 => {
-                self.rl_reg(L);
-                2
-            }
-            0x16 => {
-                self.rl_hl(mmu);
-                4
-            }
-            0x17 => {
-                self.rl_reg(A);
-                2
-            }
+            0x10 => self.rl_reg(B),
+            0x11 => self.rl_reg(C),
+            0x12 => self.rl_reg(D),
+            0x13 => self.rl_reg(E),
+            0x14 => self.rl_reg(H),
+            0x15 => self.rl_reg(L),
+            0x16 => self.rl_hl(mmu),
+            0x17 => self.rl_reg(A),
 
-            0x18 => {
-                self.rr_reg(B);
-                2
-            }
-            0x19 => {
-                self.rr_reg(C);
-                2
-            }
-            0x1A => {
-                self.rr_reg(D);
-                2
-            }
-            0x1B => {
-                self.rr_reg(E);
-                2
-            }
-            0x1C => {
-                self.rr_reg(H);
-                2
-            }
-            0x1D => {
-                self.rr_reg(L);
-                2
-            }
-            0x1E => {
-                self.rr_hl(mmu);
-                4
-            }
-            0x1F => {
-                self.rr_reg(A);
-                2
-            }
+            0x18 => self.rr_reg(B),
+            0x19 => self.rr_reg(C),
+            0x1A => self.rr_reg(D),
+            0x1B => self.rr_reg(E),
+            0x1C => self.rr_reg(H),
+            0x1D => self.rr_reg(L),
+            0x1E => self.rr_hl(mmu),
+            0x1F => self.rr_reg(A),
 
-            0x20 => {
-                self.sla_reg(B);
-                2
-            }
-            0x21 => {
-                self.sla_reg(C);
-                2
-            }
-            0x22 => {
-                self.sla_reg(D);
-                2
-            }
-            0x23 => {
-                self.sla_reg(E);
-                2
-            }
-            0x24 => {
-                self.sla_reg(H);
-                2
-            }
-            0x25 => {
-                self.sla_reg(L);
-                2
-            }
-            0x26 => {
-                self.sla_hl(mmu);
-                4
-            }
-            0x27 => {
-                self.sla_reg(A);
-                2
-            }
+            0x20 => self.sla_reg(B),
+            0x21 => self.sla_reg(C),
+            0x22 => self.sla_reg(D),
+            0x23 => self.sla_reg(E),
+            0x24 => self.sla_reg(H),
+            0x25 => self.sla_reg(L),
+            0x26 => self.sla_hl(mmu),
+            0x27 => self.sla_reg(A),
 
-            0x28 => {
-                self.sra_reg(B);
-                2
-            }
-            0x29 => {
-                self.sra_reg(C);
-                2
-            }
-            0x2A => {
-                self.sra_reg(D);
-                2
-            }
-            0x2B => {
-                self.sra_reg(E);
-                2
-            }
-            0x2C => {
-                self.sra_reg(H);
-                2
-            }
-            0x2D => {
-                self.sra_reg(L);
-                2
-            }
-            0x2E => {
-                self.sra_hl(mmu);
-                4
-            }
-            0x2F => {
-                self.sra_reg(A);
-                2
-            }
+            0x28 => self.sra_reg(B),
+            0x29 => self.sra_reg(C),
+            0x2A => self.sra_reg(D),
+            0x2B => self.sra_reg(E),
+            0x2C => self.sra_reg(H),
+            0x2D => self.sra_reg(L),
+            0x2E => self.sra_hl(mmu),
+            0x2F => self.sra_reg(A),
 
-            0x30 => {
-                self.swap_reg(B);
-                2
-            }
-            0x31 => {
-                self.swap_reg(C);
-                2
-            }
-            0x32 => {
-                self.swap_reg(D);
-                2
-            }
-            0x33 => {
-                self.swap_reg(E);
-                2
-            }
-            0x34 => {
-                self.swap_reg(H);
-                2
-            }
-            0x35 => {
-                self.swap_reg(L);
-                2
-            }
-            0x36 => {
-                self.swap_hl(mmu);
-                4
-            }
-            0x37 => {
-                self.swap_reg(A);
-                2
-            }
+            0x30 => self.swap_reg(B),
+            0x31 => self.swap_reg(C),
+            0x32 => self.swap_reg(D),
+            0x33 => self.swap_reg(E),
+            0x34 => self.swap_reg(H),
+            0x35 => self.swap_reg(L),
+            0x36 => self.swap_hl(mmu),
+            0x37 => self.swap_reg(A),
 
-            0x38 => {
-                self.srl_reg(B);
-                2
-            }
-            0x39 => {
-                self.srl_reg(C);
-                2
-            }
-            0x3A => {
-                self.srl_reg(D);
-                2
-            }
-            0x3B => {
-                self.srl_reg(E);
-                2
-            }
-            0x3C => {
-                self.srl_reg(H);
-                2
-            }
-            0x3D => {
-                self.srl_reg(L);
-                2
-            }
-            0x3E => {
-                self.srl_hl(mmu);
-                4
-            }
-            0x3F => {
-                self.srl_reg(A);
-                2
-            }
+            0x38 => self.srl_reg(B),
+            0x39 => self.srl_reg(C),
+            0x3A => self.srl_reg(D),
+            0x3B => self.srl_reg(E),
+            0x3C => self.srl_reg(H),
+            0x3D => self.srl_reg(L),
+            0x3E => self.srl_hl(mmu),
+            0x3F => self.srl_reg(A),
 
             0x40 => self.bit_reg(0, B),
             0x41 => self.bit_reg(0, C),
@@ -1595,10 +1404,7 @@ impl CPU {
             0x43 => self.bit_reg(0, E),
             0x44 => self.bit_reg(0, H),
             0x45 => self.bit_reg(0, L),
-            0x46 => {
-                self.bit_hl(0, mmu);
-                3
-            }
+            0x46 => self.bit_hl(0, mmu),
             0x47 => self.bit_reg(0, A),
 
             0x48 => self.bit_reg(1, B),
@@ -1607,10 +1413,7 @@ impl CPU {
             0x4B => self.bit_reg(1, E),
             0x4C => self.bit_reg(1, H),
             0x4D => self.bit_reg(1, L),
-            0x4E => {
-                self.bit_hl(1, mmu);
-                3
-            }
+            0x4E => self.bit_hl(1, mmu),
             0x4F => self.bit_reg(1, A),
 
             0x50 => self.bit_reg(2, B),
@@ -1619,10 +1422,7 @@ impl CPU {
             0x53 => self.bit_reg(2, E),
             0x54 => self.bit_reg(2, H),
             0x55 => self.bit_reg(2, L),
-            0x56 => {
-                self.bit_hl(2, mmu);
-                3
-            }
+            0x56 => self.bit_hl(2, mmu),
             0x57 => self.bit_reg(2, A),
 
             0x58 => self.bit_reg(3, B),
@@ -1631,10 +1431,7 @@ impl CPU {
             0x5B => self.bit_reg(3, E),
             0x5C => self.bit_reg(3, H),
             0x5D => self.bit_reg(3, L),
-            0x5E => {
-                self.bit_hl(3, mmu);
-                3
-            }
+            0x5E => self.bit_hl(3, mmu),
             0x5F => self.bit_reg(3, A),
 
             0x60 => self.bit_reg(4, B),
@@ -1643,10 +1440,7 @@ impl CPU {
             0x63 => self.bit_reg(4, E),
             0x64 => self.bit_reg(4, H),
             0x65 => self.bit_reg(4, L),
-            0x66 => {
-                self.bit_hl(4, mmu);
-                3
-            }
+            0x66 => self.bit_hl(4, mmu),
             0x67 => self.bit_reg(4, A),
 
             0x68 => self.bit_reg(5, B),
@@ -1655,10 +1449,7 @@ impl CPU {
             0x6B => self.bit_reg(5, E),
             0x6C => self.bit_reg(5, H),
             0x6D => self.bit_reg(5, L),
-            0x6E => {
-                self.bit_hl(5, mmu);
-                3
-            }
+            0x6E => self.bit_hl(5, mmu),
             0x6F => self.bit_reg(5, A),
 
             0x70 => self.bit_reg(6, B),
@@ -1667,10 +1458,7 @@ impl CPU {
             0x73 => self.bit_reg(6, E),
             0x74 => self.bit_reg(6, H),
             0x75 => self.bit_reg(6, L),
-            0x76 => {
-                self.bit_hl(6, mmu);
-                3
-            }
+            0x76 => self.bit_hl(6, mmu),
             0x77 => self.bit_reg(6, A),
 
             0x78 => self.bit_reg(7, B),
@@ -1679,10 +1467,7 @@ impl CPU {
             0x7B => self.bit_reg(7, E),
             0x7C => self.bit_reg(7, H),
             0x7D => self.bit_reg(7, L),
-            0x7E => {
-                self.bit_hl(7, mmu);
-                3
-            }
+            0x7E => self.bit_hl(7, mmu),
             0x7F => self.bit_reg(7, A),
 
             0x80 => self.res_reg(0, B),
@@ -1691,10 +1476,7 @@ impl CPU {
             0x83 => self.res_reg(0, E),
             0x84 => self.res_reg(0, H),
             0x85 => self.res_reg(0, L),
-            0x86 => {
-                self.res_hl(0, mmu);
-                4
-            }
+            0x86 => self.res_hl(0, mmu),
             0x87 => self.res_reg(0, A),
 
             0x88 => self.res_reg(1, B),
@@ -1703,10 +1485,7 @@ impl CPU {
             0x8B => self.res_reg(1, E),
             0x8C => self.res_reg(1, H),
             0x8D => self.res_reg(1, L),
-            0x8E => {
-                self.res_hl(1, mmu);
-                4
-            }
+            0x8E => self.res_hl(1, mmu),
             0x8F => self.res_reg(1, A),
 
             0x90 => self.res_reg(2, B),
@@ -1715,10 +1494,7 @@ impl CPU {
             0x93 => self.res_reg(2, E),
             0x94 => self.res_reg(2, H),
             0x95 => self.res_reg(2, L),
-            0x96 => {
-                self.res_hl(2, mmu);
-                4
-            }
+            0x96 => self.res_hl(2, mmu),
             0x97 => self.res_reg(2, A),
 
             0x98 => self.res_reg(3, B),
@@ -1727,10 +1503,7 @@ impl CPU {
             0x9B => self.res_reg(3, E),
             0x9C => self.res_reg(3, H),
             0x9D => self.res_reg(3, L),
-            0x9E => {
-                self.res_hl(3, mmu);
-                4
-            }
+            0x9E => self.res_hl(3, mmu),
             0x9F => self.res_reg(3, A),
 
             0xA0 => self.res_reg(4, B),
@@ -1739,10 +1512,7 @@ impl CPU {
             0xA3 => self.res_reg(4, E),
             0xA4 => self.res_reg(4, H),
             0xA5 => self.res_reg(4, L),
-            0xA6 => {
-                self.res_hl(4, mmu);
-                4
-            }
+            0xA6 => self.res_hl(4, mmu),
             0xA7 => self.res_reg(4, A),
 
             0xA8 => self.res_reg(5, B),
@@ -1751,10 +1521,7 @@ impl CPU {
             0xAB => self.res_reg(5, E),
             0xAC => self.res_reg(5, H),
             0xAD => self.res_reg(5, L),
-            0xAE => {
-                self.res_hl(5, mmu);
-                4
-            }
+            0xAE => self.res_hl(5, mmu),
             0xAF => self.res_reg(5, A),
 
             0xB0 => self.res_reg(6, B),
@@ -1763,10 +1530,7 @@ impl CPU {
             0xB3 => self.res_reg(6, E),
             0xB4 => self.res_reg(6, H),
             0xB5 => self.res_reg(6, L),
-            0xB6 => {
-                self.res_hl(6, mmu);
-                4
-            }
+            0xB6 => self.res_hl(6, mmu),
             0xB7 => self.res_reg(6, A),
 
             0xB8 => self.res_reg(7, B),
@@ -1775,10 +1539,7 @@ impl CPU {
             0xBB => self.res_reg(7, E),
             0xBC => self.res_reg(7, H),
             0xBD => self.res_reg(7, L),
-            0xBE => {
-                self.res_hl(7, mmu);
-                4
-            }
+            0xBE => self.res_hl(7, mmu),
             0xBF => self.res_reg(7, A),
 
             0xC0 => self.set_reg(0, B),
@@ -1787,10 +1548,7 @@ impl CPU {
             0xC3 => self.set_reg(0, E),
             0xC4 => self.set_reg(0, H),
             0xC5 => self.set_reg(0, L),
-            0xC6 => {
-                self.set_hl(0, mmu);
-                4
-            }
+            0xC6 => self.set_hl(0, mmu),
             0xC7 => self.set_reg(0, A),
 
             0xC8 => self.set_reg(1, B),
@@ -1799,10 +1557,7 @@ impl CPU {
             0xCB => self.set_reg(1, E),
             0xCC => self.set_reg(1, H),
             0xCD => self.set_reg(1, L),
-            0xCE => {
-                self.set_hl(1, mmu);
-                4
-            }
+            0xCE => self.set_hl(1, mmu),
             0xCF => self.set_reg(1, A),
 
             0xD0 => self.set_reg(2, B),
@@ -1811,10 +1566,7 @@ impl CPU {
             0xD3 => self.set_reg(2, E),
             0xD4 => self.set_reg(2, H),
             0xD5 => self.set_reg(2, L),
-            0xD6 => {
-                self.set_hl(2, mmu);
-                4
-            }
+            0xD6 => self.set_hl(2, mmu),
             0xD7 => self.set_reg(2, A),
 
             0xD8 => self.set_reg(3, B),
@@ -1823,10 +1575,7 @@ impl CPU {
             0xDB => self.set_reg(3, E),
             0xDC => self.set_reg(3, H),
             0xDD => self.set_reg(3, L),
-            0xDE => {
-                self.set_hl(3, mmu);
-                4
-            }
+            0xDE => self.set_hl(3, mmu),
             0xDF => self.set_reg(3, A),
 
             0xE0 => self.set_reg(4, B),
@@ -1835,10 +1584,7 @@ impl CPU {
             0xE3 => self.set_reg(4, E),
             0xE4 => self.set_reg(4, H),
             0xE5 => self.set_reg(4, L),
-            0xE6 => {
-                self.set_hl(4, mmu);
-                4
-            }
+            0xE6 => self.set_hl(4, mmu),
             0xE7 => self.set_reg(4, A),
 
             0xE8 => self.set_reg(5, B),
@@ -1847,10 +1593,7 @@ impl CPU {
             0xEB => self.set_reg(5, E),
             0xEC => self.set_reg(5, H),
             0xED => self.set_reg(5, L),
-            0xEE => {
-                self.set_hl(5, mmu);
-                4
-            }
+            0xEE => self.set_hl(5, mmu),
             0xEF => self.set_reg(5, A),
 
             0xF0 => self.set_reg(6, B),
@@ -1859,10 +1602,7 @@ impl CPU {
             0xF3 => self.set_reg(6, E),
             0xF4 => self.set_reg(6, H),
             0xF5 => self.set_reg(6, L),
-            0xF6 => {
-                self.set_hl(6, mmu);
-                4
-            }
+            0xF6 => self.set_hl(6, mmu),
             0xF7 => self.set_reg(6, A),
 
             0xF8 => self.set_reg(7, B),
@@ -1871,10 +1611,7 @@ impl CPU {
             0xFB => self.set_reg(7, E),
             0xFC => self.set_reg(7, H),
             0xFD => self.set_reg(7, L),
-            0xFE => {
-                self.set_hl(7, mmu);
-                4
-            }
+            0xFE => self.set_hl(7, mmu),
             0xFF => self.set_reg(7, A),
         }
     }
