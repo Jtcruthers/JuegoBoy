@@ -286,16 +286,38 @@ impl CPU {
         2
     }
 
-    fn res(&mut self, bit: u8, reg: Register) -> u8 {
+    fn res(&mut self, bit: u8, value: u8) -> u8 {
         let mask = !(1 << bit);
-        self.registers[reg] &= mask;
+        value & mask
+    }
+
+    fn res_reg(&mut self, bit: u8, reg: Register) -> u8 {
+        self.registers[reg] = self.res(bit, self.registers[reg]);
         2
     }
 
-    fn set(&mut self, bit: u8, reg: Register) -> u8 {
+    fn res_hl(&mut self, bit: u8, mmu: &mut impl Memory) -> u8 {
+        let value = mmu.read_byte(self.registers.hl());
+        let new_value = self.res(bit, value);
+        mmu.write_byte(self.registers.hl(), new_value);
+        4
+    }
+
+    fn set(&mut self, bit: u8, value: u8) -> u8 {
         let mask = 1 << bit;
-        self.registers[reg] |= mask;
+        value | mask
+    }
+
+    fn set_reg(&mut self, bit: u8, reg: Register) -> u8 {
+        self.registers[reg] = self.set(bit, self.registers[reg]);
         2
+    }
+
+    fn set_hl(&mut self, bit: u8, mmu: &mut impl Memory) -> u8 {
+        let value = mmu.read_byte(self.registers.hl());
+        let new_value = self.set(bit, value);
+        mmu.write_byte(self.registers.hl(), new_value);
+        4
     }
 
     fn swap(&mut self, value: u8) -> u8 {
@@ -624,18 +646,6 @@ impl CPU {
             carry,
         );
         1
-    }
-
-    fn inc_reg16(&mut self, reg: Register16) -> u8 {
-        let value = match reg {
-            SP => self.sp,
-            PC => self.pc,
-            _ => self.registers.get_reg16(reg),
-        };
-        let (upper, lower) = self.u16_to_u8s(value.wrapping_add(1));
-        self.registers[B] = upper;
-        self.registers[C] = lower;
-        2
     }
 
     pub fn execute(&mut self, opcode: u8, mmu: &mut impl Memory) -> u8 {
@@ -1675,245 +1685,197 @@ impl CPU {
             }
             0x7F => self.bit_reg(7, A),
 
-            0x80 => self.res(0, B),
-            0x81 => self.res(0, C),
-            0x82 => self.res(0, D),
-            0x83 => self.res(0, E),
-            0x84 => self.res(0, H),
-            0x85 => self.res(0, L),
+            0x80 => self.res_reg(0, B),
+            0x81 => self.res_reg(0, C),
+            0x82 => self.res_reg(0, D),
+            0x83 => self.res_reg(0, E),
+            0x84 => self.res_reg(0, H),
+            0x85 => self.res_reg(0, L),
             0x86 => {
-                let mask = !(1 << 0);
-                let value = mmu.read_byte(self.registers.hl());
-                let new_value = value & mask;
-                mmu.write_byte(self.registers.hl(), new_value);
+                self.res_hl(0, mmu);
                 4
             }
-            0x87 => self.res(0, A),
+            0x87 => self.res_reg(0, A),
 
-            0x88 => self.res(1, B),
-            0x89 => self.res(1, C),
-            0x8A => self.res(1, D),
-            0x8B => self.res(1, E),
-            0x8C => self.res(1, H),
-            0x8D => self.res(1, L),
+            0x88 => self.res_reg(1, B),
+            0x89 => self.res_reg(1, C),
+            0x8A => self.res_reg(1, D),
+            0x8B => self.res_reg(1, E),
+            0x8C => self.res_reg(1, H),
+            0x8D => self.res_reg(1, L),
             0x8E => {
-                let mask = !(1 << 1);
-                let value = mmu.read_byte(self.registers.hl());
-                let new_value = value & mask;
-                mmu.write_byte(self.registers.hl(), new_value);
+                self.res_hl(1, mmu);
                 4
             }
-            0x8F => self.res(1, A),
+            0x8F => self.res_reg(1, A),
 
-            0x90 => self.res(2, B),
-            0x91 => self.res(2, C),
-            0x92 => self.res(2, D),
-            0x93 => self.res(2, E),
-            0x94 => self.res(2, H),
-            0x95 => self.res(2, L),
+            0x90 => self.res_reg(2, B),
+            0x91 => self.res_reg(2, C),
+            0x92 => self.res_reg(2, D),
+            0x93 => self.res_reg(2, E),
+            0x94 => self.res_reg(2, H),
+            0x95 => self.res_reg(2, L),
             0x96 => {
-                let mask = !(1 << 2);
-                let value = mmu.read_byte(self.registers.hl());
-                let new_value = value & mask;
-                mmu.write_byte(self.registers.hl(), new_value);
+                self.res_hl(2, mmu);
                 4
             }
-            0x97 => self.res(2, A),
+            0x97 => self.res_reg(2, A),
 
-            0x98 => self.res(3, B),
-            0x99 => self.res(3, C),
-            0x9A => self.res(3, D),
-            0x9B => self.res(3, E),
-            0x9C => self.res(3, H),
-            0x9D => self.res(3, L),
+            0x98 => self.res_reg(3, B),
+            0x99 => self.res_reg(3, C),
+            0x9A => self.res_reg(3, D),
+            0x9B => self.res_reg(3, E),
+            0x9C => self.res_reg(3, H),
+            0x9D => self.res_reg(3, L),
             0x9E => {
-                let mask = !(1 << 3);
-                let value = mmu.read_byte(self.registers.hl());
-                let new_value = value & mask;
-                mmu.write_byte(self.registers.hl(), new_value);
+                self.res_hl(3, mmu);
                 4
             }
-            0x9F => self.res(3, A),
+            0x9F => self.res_reg(3, A),
 
-            0xA0 => self.res(4, B),
-            0xA1 => self.res(4, C),
-            0xA2 => self.res(4, D),
-            0xA3 => self.res(4, E),
-            0xA4 => self.res(4, H),
-            0xA5 => self.res(4, L),
+            0xA0 => self.res_reg(4, B),
+            0xA1 => self.res_reg(4, C),
+            0xA2 => self.res_reg(4, D),
+            0xA3 => self.res_reg(4, E),
+            0xA4 => self.res_reg(4, H),
+            0xA5 => self.res_reg(4, L),
             0xA6 => {
-                let mask = !(1 << 4);
-                let value = mmu.read_byte(self.registers.hl());
-                let new_value = value & mask;
-                mmu.write_byte(self.registers.hl(), new_value);
+                self.res_hl(4, mmu);
                 4
             }
-            0xA7 => self.res(4, A),
+            0xA7 => self.res_reg(4, A),
 
-            0xA8 => self.res(5, B),
-            0xA9 => self.res(5, C),
-            0xAA => self.res(5, D),
-            0xAB => self.res(5, E),
-            0xAC => self.res(5, H),
-            0xAD => self.res(5, L),
+            0xA8 => self.res_reg(5, B),
+            0xA9 => self.res_reg(5, C),
+            0xAA => self.res_reg(5, D),
+            0xAB => self.res_reg(5, E),
+            0xAC => self.res_reg(5, H),
+            0xAD => self.res_reg(5, L),
             0xAE => {
-                let mask = !(1 << 5);
-                let value = mmu.read_byte(self.registers.hl());
-                let new_value = value & mask;
-                mmu.write_byte(self.registers.hl(), new_value);
+                self.res_hl(5, mmu);
                 4
             }
-            0xAF => self.res(5, A),
+            0xAF => self.res_reg(5, A),
 
-            0xB0 => self.res(6, B),
-            0xB1 => self.res(6, C),
-            0xB2 => self.res(6, D),
-            0xB3 => self.res(6, E),
-            0xB4 => self.res(6, H),
-            0xB5 => self.res(6, L),
+            0xB0 => self.res_reg(6, B),
+            0xB1 => self.res_reg(6, C),
+            0xB2 => self.res_reg(6, D),
+            0xB3 => self.res_reg(6, E),
+            0xB4 => self.res_reg(6, H),
+            0xB5 => self.res_reg(6, L),
             0xB6 => {
-                let mask = !(1 << 6);
-                let value = mmu.read_byte(self.registers.hl());
-                let new_value = value & mask;
-                mmu.write_byte(self.registers.hl(), new_value);
+                self.res_hl(6, mmu);
                 4
             }
-            0xB7 => self.res(6, A),
+            0xB7 => self.res_reg(6, A),
 
-            0xB8 => self.res(7, B),
-            0xB9 => self.res(7, C),
-            0xBA => self.res(7, D),
-            0xBB => self.res(7, E),
-            0xBC => self.res(7, H),
-            0xBD => self.res(7, L),
+            0xB8 => self.res_reg(7, B),
+            0xB9 => self.res_reg(7, C),
+            0xBA => self.res_reg(7, D),
+            0xBB => self.res_reg(7, E),
+            0xBC => self.res_reg(7, H),
+            0xBD => self.res_reg(7, L),
             0xBE => {
-                let mask = !(1 << 7);
-                let value = mmu.read_byte(self.registers.hl());
-                let new_value = value & mask;
-                mmu.write_byte(self.registers.hl(), new_value);
+                self.res_hl(7, mmu);
                 4
             }
-            0xBF => self.res(7, A),
+            0xBF => self.res_reg(7, A),
 
-            0xC0 => self.set(0, B),
-            0xC1 => self.set(0, C),
-            0xC2 => self.set(0, D),
-            0xC3 => self.set(0, E),
-            0xC4 => self.set(0, H),
-            0xC5 => self.set(0, L),
+            0xC0 => self.set_reg(0, B),
+            0xC1 => self.set_reg(0, C),
+            0xC2 => self.set_reg(0, D),
+            0xC3 => self.set_reg(0, E),
+            0xC4 => self.set_reg(0, H),
+            0xC5 => self.set_reg(0, L),
             0xC6 => {
-                let mask = 1 << 0;
-                let value = mmu.read_byte(self.registers.hl());
-                let new_value = value | mask;
-                mmu.write_byte(self.registers.hl(), new_value);
+                self.set_hl(0, mmu);
                 4
             }
-            0xC7 => self.set(0, A),
+            0xC7 => self.set_reg(0, A),
 
-            0xC8 => self.set(1, B),
-            0xC9 => self.set(1, C),
-            0xCA => self.set(1, D),
-            0xCB => self.set(1, E),
-            0xCC => self.set(1, H),
-            0xCD => self.set(1, L),
+            0xC8 => self.set_reg(1, B),
+            0xC9 => self.set_reg(1, C),
+            0xCA => self.set_reg(1, D),
+            0xCB => self.set_reg(1, E),
+            0xCC => self.set_reg(1, H),
+            0xCD => self.set_reg(1, L),
             0xCE => {
-                let mask = 1 << 1;
-                let value = mmu.read_byte(self.registers.hl());
-                let new_value = value | mask;
-                mmu.write_byte(self.registers.hl(), new_value);
+                self.set_hl(1, mmu);
                 4
             }
-            0xCF => self.set(1, A),
+            0xCF => self.set_reg(1, A),
 
-            0xD0 => self.set(2, B),
-            0xD1 => self.set(2, C),
-            0xD2 => self.set(2, D),
-            0xD3 => self.set(2, E),
-            0xD4 => self.set(2, H),
-            0xD5 => self.set(2, L),
+            0xD0 => self.set_reg(2, B),
+            0xD1 => self.set_reg(2, C),
+            0xD2 => self.set_reg(2, D),
+            0xD3 => self.set_reg(2, E),
+            0xD4 => self.set_reg(2, H),
+            0xD5 => self.set_reg(2, L),
             0xD6 => {
-                let mask = 1 << 2;
-                let value = mmu.read_byte(self.registers.hl());
-                let new_value = value | mask;
-                mmu.write_byte(self.registers.hl(), new_value);
+                self.set_hl(2, mmu);
                 4
             }
-            0xD7 => self.set(2, A),
+            0xD7 => self.set_reg(2, A),
 
-            0xD8 => self.set(3, B),
-            0xD9 => self.set(3, C),
-            0xDA => self.set(3, D),
-            0xDB => self.set(3, E),
-            0xDC => self.set(3, H),
-            0xDD => self.set(3, L),
+            0xD8 => self.set_reg(3, B),
+            0xD9 => self.set_reg(3, C),
+            0xDA => self.set_reg(3, D),
+            0xDB => self.set_reg(3, E),
+            0xDC => self.set_reg(3, H),
+            0xDD => self.set_reg(3, L),
             0xDE => {
-                let mask = 1 << 3;
-                let value = mmu.read_byte(self.registers.hl());
-                let new_value = value | mask;
-                mmu.write_byte(self.registers.hl(), new_value);
+                self.set_hl(3, mmu);
                 4
             }
-            0xDF => self.set(3, A),
+            0xDF => self.set_reg(3, A),
 
-            0xE0 => self.set(4, B),
-            0xE1 => self.set(4, C),
-            0xE2 => self.set(4, D),
-            0xE3 => self.set(4, E),
-            0xE4 => self.set(4, H),
-            0xE5 => self.set(4, L),
+            0xE0 => self.set_reg(4, B),
+            0xE1 => self.set_reg(4, C),
+            0xE2 => self.set_reg(4, D),
+            0xE3 => self.set_reg(4, E),
+            0xE4 => self.set_reg(4, H),
+            0xE5 => self.set_reg(4, L),
             0xE6 => {
-                let mask = 1 << 4;
-                let value = mmu.read_byte(self.registers.hl());
-                let new_value = value | mask;
-                mmu.write_byte(self.registers.hl(), new_value);
+                self.set_hl(4, mmu);
                 4
             }
-            0xE7 => self.set(4, A),
+            0xE7 => self.set_reg(4, A),
 
-            0xE8 => self.set(5, B),
-            0xE9 => self.set(5, C),
-            0xEA => self.set(5, D),
-            0xEB => self.set(5, E),
-            0xEC => self.set(5, H),
-            0xED => self.set(5, L),
+            0xE8 => self.set_reg(5, B),
+            0xE9 => self.set_reg(5, C),
+            0xEA => self.set_reg(5, D),
+            0xEB => self.set_reg(5, E),
+            0xEC => self.set_reg(5, H),
+            0xED => self.set_reg(5, L),
             0xEE => {
-                let mask = 1 << 5;
-                let value = mmu.read_byte(self.registers.hl());
-                let new_value = value | mask;
-                mmu.write_byte(self.registers.hl(), new_value);
+                self.set_hl(5, mmu);
                 4
             }
-            0xEF => self.set(5, A),
+            0xEF => self.set_reg(5, A),
 
-            0xF0 => self.set(6, B),
-            0xF1 => self.set(6, C),
-            0xF2 => self.set(6, D),
-            0xF3 => self.set(6, E),
-            0xF4 => self.set(6, H),
-            0xF5 => self.set(6, L),
+            0xF0 => self.set_reg(6, B),
+            0xF1 => self.set_reg(6, C),
+            0xF2 => self.set_reg(6, D),
+            0xF3 => self.set_reg(6, E),
+            0xF4 => self.set_reg(6, H),
+            0xF5 => self.set_reg(6, L),
             0xF6 => {
-                let mask = 1 << 6;
-                let value = mmu.read_byte(self.registers.hl());
-                let new_value = value | mask;
-                mmu.write_byte(self.registers.hl(), new_value);
+                self.set_hl(6, mmu);
                 4
             }
-            0xF7 => self.set(6, A),
+            0xF7 => self.set_reg(6, A),
 
-            0xF8 => self.set(7, B),
-            0xF9 => self.set(7, C),
-            0xFA => self.set(7, D),
-            0xFB => self.set(7, E),
-            0xFC => self.set(7, H),
-            0xFD => self.set(7, L),
+            0xF8 => self.set_reg(7, B),
+            0xF9 => self.set_reg(7, C),
+            0xFA => self.set_reg(7, D),
+            0xFB => self.set_reg(7, E),
+            0xFC => self.set_reg(7, H),
+            0xFD => self.set_reg(7, L),
             0xFE => {
-                let mask = 1 << 7;
-                let value = mmu.read_byte(self.registers.hl());
-                let new_value = value | mask;
-                mmu.write_byte(self.registers.hl(), new_value);
+                self.set_hl(7, mmu);
                 4
             }
-            0xFF => self.set(7, A),
+            0xFF => self.set_reg(7, A),
         }
     }
 }
@@ -1939,11 +1901,11 @@ mod tests {
     fn test_set() {
         let mut cpu = CPU::new();
         cpu.registers[A] = 0b00000000;
-        cpu.set(3, A);
+        cpu.set_reg(3, A);
         assert_eq!(cpu.registers[A], 0b00001000);
 
         cpu.registers[A] = 0b00000000;
-        cpu.set(7, A);
+        cpu.set_reg(7, A);
         assert_eq!(cpu.registers[A], 0b10000000);
     }
 
@@ -1951,11 +1913,11 @@ mod tests {
     fn test_res() {
         let mut cpu = CPU::new();
         cpu.registers[A] = 0b11111111;
-        cpu.res(3, A);
+        cpu.res_reg(3, A);
         assert_eq!(cpu.registers[A], 0b11110111);
 
         cpu.registers[A] = 0b11111111;
-        cpu.res(7, A);
+        cpu.res_reg(7, A);
         assert_eq!(cpu.registers[A], 0b01111111);
     }
 
