@@ -99,19 +99,23 @@ impl MMU {
         self.ppu.step(cycles);
         if self.ppu.interrupt_vblank {
             self.if_reg |= 0b1;
+            self.ppu.interrupt_vblank = false;
         }
         if self.ppu.interrupt_stat {
             self.if_reg |= 0b10;
+            self.ppu.interrupt_stat = false;
         }
 
         self.timer.step(cycles);
         if self.timer.interrupt {
             self.if_reg |= 0b100;
+            self.timer.interrupt = false;
         }
 
         self.joypad.step();
         if self.joypad.interrupt {
             self.if_reg |= 0b10000;
+            self.joypad.interrupt = false;
         }
 
         self.apu.step(cycles);
