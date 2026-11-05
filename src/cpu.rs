@@ -2,7 +2,7 @@ use std::fmt;
 
 use log::*;
 
-use crate::mmu::Memory;
+use crate::mmu::{Memory, INTERRUPT_MASK};
 use crate::registers::Registers;
 use crate::registers::{Register, Register::*, Register16, Register16::*};
 
@@ -74,13 +74,13 @@ impl CPU {
 
     pub fn step(&mut self, mmu: &mut impl Memory) {
         trace!("\n\n");
-        // I dont think we want to tick here for these
-        let interrupts_pending = mmu.read_byte(IF_FLAG) & mmu.read_byte(IE_FLAG);
+        let interrupts_pending = self.get_pending_interrupt(mmu);
 
         if self.halted {
             debug!("Halted");
             if interrupts_pending == 0 {
                 mmu.tick();
+                debug!("No interrupts pending, staying halted");
                 return;
             }
 
@@ -103,7 +103,7 @@ impl CPU {
         }
 
         if interrupts_pending > 0 && self.ime {
-            trace!("Handling Interrupts: 0b{:08b}", interrupts_pending);
+            debug!("Handling Interrupts: 0b{:08b}", interrupts_pending);
             self.interrupt_service_routine(mmu);
         }
 
@@ -586,6 +586,13 @@ impl CPU {
         }
     }
 
+    fn get_pending_interrupt(&mut self, mmu: &mut impl Memory) -> u8 {
+        let if_reg = mmu.read_byte(IF_FLAG);
+        let ie_reg = mmu.read_byte(IE_FLAG);
+
+        if_reg & ie_reg & INTERRUPT_MASK
+    }
+
     /// Restart pushed pc, and sets pc to address
     ///
     /// Takes 3 M-cycles
@@ -596,19 +603,6 @@ impl CPU {
 
     // Supposed to take exactly 5 M-cycles
     fn interrupt_service_routine(&mut self, mmu: &mut impl Memory) {
-        if !self.ime {
-            trace!("interrupt service routine called but ime is false");
-            return;
-        }
-        // Dont use ticks here
-        let if_reg = mmu.read_byte(IF_FLAG);
-        let ie_reg = mmu.read_byte(IE_FLAG);
-        let interrupt = if_reg & ie_reg;
-        if interrupt == 0 {
-            trace!("interrupt service routine called but no interrupts are enabled");
-            return;
-        }
-
         // Two M-cycles in the beginning since we will handle the interrupt here
         mmu.tick();
         mmu.tick();
@@ -622,11 +616,13 @@ impl CPU {
         self.sp -= 1;
         self.write_byte(mmu, self.sp, lower);
 
+        let interrupt = self.get_pending_interrupt(mmu);
         trace!(
             "interrupt service routine called with interrupt: {:X}",
             interrupt
         );
 
+        let if_reg = mmu.read_byte(IF_FLAG);
         // 1 M-cycle to set pc to correct address
         if interrupt & 0b1 != 0 {
             trace!("vblank interrupt");

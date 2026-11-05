@@ -23,6 +23,7 @@ const MASK_JOYPAD: u8 = 0b10000;
 */
 
 const BOOT_ROM: &[u8; 256] = include_bytes!("../bootix_dmg.bin");
+pub const INTERRUPT_MASK: u8 = 0b0001_1111;
 
 pub struct MMU {
     wram: [u8; 0x2000],
@@ -60,13 +61,15 @@ impl MMU {
     }
 
     fn handle_io_read(&mut self, address: u16) -> u8 {
+        // Unused bits in I/O registers always return 1 when read
+        // But IE is an acception, as it's an actual 8-bit register
         match address {
             0xFF00 => self.joypad.read_byte(address),
             0xFF01 => todo!("Serial"), //TODO - Serial
             0xFF02 => todo!("Serial"), //TODO - Serial
             0xFF04..=0xFF07 => self.timer.read_byte(address),
-            0xFF0F => self.if_reg, // Interrupt Flag
-            0xFF10..=0xFF3F => 0,  //TODO - APU
+            0xFF0F => self.if_reg | !INTERRUPT_MASK, // Interrupt Flag
+            0xFF10..=0xFF3F => 0,                    //TODO - APU
             0xFF40..=0xFF4B => self.ppu.read_byte(address),
             0xFF50 => self.boot_rom_reg,
             _ => 0xFF,
