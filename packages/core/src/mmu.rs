@@ -22,7 +22,7 @@ const MASK_SERIAL: u8 = 0b01000;
 const MASK_JOYPAD: u8 = 0b10000;
 */
 
-const BOOT_ROM: &[u8; 256] = include_bytes!("../bootix_dmg.bin");
+const BOOT_ROM: &[u8; 256] = include_bytes!("../../../bootix_dmg.bin");
 pub const INTERRUPT_MASK: u8 = 0b0001_1111;
 
 pub struct MMU {
