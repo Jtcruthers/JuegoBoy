@@ -5,6 +5,8 @@ pub struct PPU {
     pub interrupt_stat: bool,
 }
 
+const VBLANK_START: u64 = 114 * 144;
+
 impl PPU {
     pub fn new() -> Self {
         PPU {
@@ -22,7 +24,8 @@ impl PPU {
         }
 
         self.scan_line = (self.cycles / 114) as u8;
-        if self.scan_line == 144 {
+        // Only fires the first time it enters VBlank
+        if self.cycles == VBLANK_START {
             self.interrupt_vblank = true;
         }
     }
