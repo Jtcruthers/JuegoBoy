@@ -15,6 +15,7 @@ pub struct CPU {
     pc: u16,
     ime: bool,
     halted: bool,
+    ei_called: bool,
 }
 
 impl fmt::Display for CPU {
@@ -52,6 +53,7 @@ impl CPU {
             pc: 0x0,
             ime: false,
             halted: false,
+            ei_called: false,
         }
     }
 
@@ -69,15 +71,19 @@ impl CPU {
         if self.halted {
             debug!("Halted");
             if interrupts_pending == 0 {
-                return; // Do we still return if we dont have cycles
+                mmu.tick();
+                return;
             }
 
             if self.ime {
                 self.halted = false;
-                return self.interrupt_service_routine(mmu);
+                self.interrupt_service_routine(mmu);
+                return;
             } else {
+                mmu.tick();
                 self.halted = false;
                 // This is when the halt bug occurs. Interrupt is pending, but IME is false.
+                return;
             }
         }
 
@@ -103,6 +109,12 @@ impl CPU {
             self.registers[B],
             self.registers.hl()
         );
+
+        // Enable IME flag after instruction following EI
+        if self.ei_called && opcode != 0xFB {
+            self.ime = true;
+            self.ei_called = false;
+        }
     }
 
     fn read_byte(&mut self, mmu: &mut impl Memory, address: u16) -> u8 {
@@ -559,27 +571,41 @@ impl CPU {
         self.pc = address;
     }
 
-    // TODO - figure out cycles here
+    // Supposed to take exactly 5 M-cycles
     fn interrupt_service_routine(&mut self, mmu: &mut impl Memory) {
         if !self.ime {
             trace!("interrupt service routine called but ime is false");
             return;
         }
-        let if_reg = self.read_byte(mmu, IF_FLAG);
-        let ie_reg = self.read_byte(mmu, IE_FLAG);
+        // Dont use ticks here
+        let if_reg = mmu.read_byte(IF_FLAG);
+        let ie_reg = mmu.read_byte(IE_FLAG);
         let interrupt = if_reg & ie_reg;
         if interrupt == 0 {
             trace!("interrupt service routine called but no interrupts are enabled");
             return;
         }
 
+        // Two M-cycles in the beginning since we will handle the interrupt here
+        mmu.tick();
+        mmu.tick();
+
         self.ime = false;
-        self.push(self.pc, mmu);
+
+        // push pc onto stack taking 2 M-cycles
+        let (upper, lower) = self.u16_to_u8s(self.pc);
+        mmu.tick();
+        self.sp -= 1;
+        self.write_byte(mmu, self.sp, upper);
+        self.sp -= 1;
+        self.write_byte(mmu, self.sp, lower);
+
         trace!(
             "interrupt service routine called with interrupt: {:X}",
             interrupt
         );
 
+        // 1 M-cycle to set pc to correct address
         if interrupt & 0b1 != 0 {
             trace!("vblank interrupt");
             self.write_byte(mmu, IF_FLAG, if_reg & 0b11111110);
@@ -599,12 +625,19 @@ impl CPU {
             return;
         }
 
+        if interrupt & 0b1000 != 0 {
+            self.write_byte(mmu, IF_FLAG, if_reg & 0b11110111);
+            self.pc = 0x58;
+            return;
+        }
+
         if interrupt & 0b10000 != 0 {
             self.write_byte(mmu, IF_FLAG, if_reg & 0b11101111);
             self.pc = 0x60;
             return;
         }
 
+        mmu.tick(); // Manually tick since we didn't hit a write_byte to do it for us
         return;
     }
 
@@ -1194,7 +1227,15 @@ impl CPU {
                 let address = 0xFF00 + self.registers.c as u16;
                 self.registers.a = self.read_byte(mmu, address);
             }
-            0xF3 => self.ime = false,
+            0xF3 => {
+                self.ime = false;
+                // pandocs says ei followed by di doesn't allow interrupts
+                // But that means we have to cancel the EI totally?
+                // Nothing says it cancels the pending, but maybe thats an implementation detail
+                // EI waits until after the next instruction, but since DI supposedly cancels out EI
+                // I will cancel the pend here
+                self.ei_called = false;
+            }
             0xF4 => {
                 panic!("Unsupported OPCODE 0xF4")
             }
@@ -1232,7 +1273,7 @@ impl CPU {
                 self.pc += 2;
                 self.registers.a = self.read_byte(mmu, address);
             }
-            0xFB => self.ime = true, // TODO, this needs to be set after instruction
+            0xFB => self.ei_called = true,
             0xFC => {
                 panic!("Unsupported OPCODE 0xFC")
             }
