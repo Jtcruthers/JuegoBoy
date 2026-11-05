@@ -61,7 +61,7 @@ impl CPU {
         opcode
     }
 
-    pub fn step(&mut self, mmu: &mut impl Memory) -> u8 {
+    pub fn step(&mut self, mmu: &mut impl Memory) {
         trace!("\n\n");
         // I dont think we want to tick here for these
         let interrupts_pending = mmu.read_byte(IF_FLAG) & mmu.read_byte(IE_FLAG);
@@ -69,7 +69,7 @@ impl CPU {
         if self.halted {
             debug!("Halted");
             if interrupts_pending == 0 {
-                return 1; // Should this be 2? Or 0?
+                return; // Do we still return if we dont have cycles
             }
 
             if self.ime {
@@ -96,15 +96,13 @@ impl CPU {
             self.registers[B],
             self.registers.hl()
         );
-        let cycles = self.execute(opcode, mmu);
+        self.execute(opcode, mmu);
         trace!(
             "AFTER A: {:02X} B: {:02X} HL: {:04X}",
             self.registers[A],
             self.registers[B],
             self.registers.hl()
         );
-
-        cycles
     }
 
     fn read_byte(&mut self, mmu: &mut impl Memory, address: u16) -> u8 {
@@ -141,12 +139,10 @@ impl CPU {
         self.registers[reg] = self.rlc(self.registers[reg]);
     }
 
-    fn rlc_hl(&mut self, mmu: &mut impl Memory) -> u8 {
+    fn rlc_hl(&mut self, mmu: &mut impl Memory) {
         let value = self.read_byte(mmu, self.registers.hl());
         let new_value = self.rlc(value);
         self.write_byte(mmu, self.registers.hl(), new_value);
-
-        4
     }
 
     fn rrc(&mut self, value: u8) -> u8 {
@@ -162,12 +158,10 @@ impl CPU {
         self.registers[reg] = self.rrc(self.registers[reg]);
     }
 
-    fn rrc_hl(&mut self, mmu: &mut impl Memory) -> u8 {
+    fn rrc_hl(&mut self, mmu: &mut impl Memory) {
         let value = self.read_byte(mmu, self.registers.hl());
         let new_value = self.rrc(value);
         self.write_byte(mmu, self.registers.hl(), new_value);
-
-        4
     }
 
     fn rl(&mut self, value: u8) -> u8 {
@@ -179,17 +173,14 @@ impl CPU {
         new_value
     }
 
-    fn rl_reg(&mut self, reg: Register) -> u8 {
+    fn rl_reg(&mut self, reg: Register) {
         self.registers[reg] = self.rl(self.registers[reg]);
-        2
     }
 
-    fn rl_hl(&mut self, mmu: &mut impl Memory) -> u8 {
+    fn rl_hl(&mut self, mmu: &mut impl Memory) {
         let value = self.read_byte(mmu, self.registers.hl());
         let new_value = self.rl(value);
         self.write_byte(mmu, self.registers.hl(), new_value);
-
-        4
     }
 
     fn rr(&mut self, value: u8) -> u8 {
@@ -201,17 +192,14 @@ impl CPU {
         new_value
     }
 
-    fn rr_reg(&mut self, reg: Register) -> u8 {
+    fn rr_reg(&mut self, reg: Register) {
         self.registers[reg] = self.rr(self.registers[reg]);
-        2
     }
 
-    fn rr_hl(&mut self, mmu: &mut impl Memory) -> u8 {
+    fn rr_hl(&mut self, mmu: &mut impl Memory) {
         let value = self.read_byte(mmu, self.registers.hl());
         let new_value = self.rr(value);
         self.write_byte(mmu, self.registers.hl(), new_value);
-
-        4
     }
 
     fn sla(&mut self, value: u8) -> u8 {
@@ -223,18 +211,15 @@ impl CPU {
         new_value
     }
 
-    fn sla_reg(&mut self, reg: Register) -> u8 {
+    fn sla_reg(&mut self, reg: Register) {
         self.registers[reg] = self.sla(self.registers[reg]);
-        2
     }
 
-    fn sla_hl(&mut self, mmu: &mut impl Memory) -> u8 {
+    fn sla_hl(&mut self, mmu: &mut impl Memory) {
         let value = self.read_byte(mmu, self.registers.hl());
         let new_value = self.sla(value);
 
         self.write_byte(mmu, self.registers.hl(), new_value);
-
-        4
     }
 
     fn sra(&mut self, value: u8) -> u8 {
@@ -247,17 +232,14 @@ impl CPU {
         new_value
     }
 
-    fn sra_reg(&mut self, reg: Register) -> u8 {
+    fn sra_reg(&mut self, reg: Register) {
         self.registers[reg] = self.sra(self.registers[reg]);
-        2
     }
 
-    fn sra_hl(&mut self, mmu: &mut impl Memory) -> u8 {
+    fn sra_hl(&mut self, mmu: &mut impl Memory) {
         let value = self.read_byte(mmu, self.registers.hl());
         let new_value = self.sra(value);
         self.write_byte(mmu, self.registers.hl(), new_value);
-
-        4
     }
 
     fn srl(&mut self, value: u8) -> u8 {
@@ -269,17 +251,14 @@ impl CPU {
         new_value
     }
 
-    fn srl_reg(&mut self, reg: Register) -> u8 {
+    fn srl_reg(&mut self, reg: Register) {
         self.registers[reg] = self.srl(self.registers[reg]);
-        2
     }
 
-    fn srl_hl(&mut self, mmu: &mut impl Memory) -> u8 {
+    fn srl_hl(&mut self, mmu: &mut impl Memory) {
         let value = self.read_byte(mmu, self.registers.hl());
         let new_value = self.srl(value);
         self.write_byte(mmu, self.registers.hl(), new_value);
-
-        4
     }
 
     fn bit(&mut self, bit: u8, value: u8) {
@@ -288,15 +267,13 @@ impl CPU {
             .set_flags(!bit_is_set, false, true, self.registers.carry_flag());
     }
 
-    fn bit_reg(&mut self, bit: u8, reg: Register) -> u8 {
+    fn bit_reg(&mut self, bit: u8, reg: Register) {
         self.bit(bit, self.registers[reg]);
-        2
     }
 
-    fn bit_hl(&mut self, bit: u8, mmu: &mut impl Memory) -> u8 {
+    fn bit_hl(&mut self, bit: u8, mmu: &mut impl Memory) {
         let value = self.read_byte(mmu, self.registers.hl());
         self.bit(bit, value);
-        3
     }
 
     fn res(&mut self, bit: u8, value: u8) -> u8 {
@@ -304,16 +281,14 @@ impl CPU {
         value & mask
     }
 
-    fn res_reg(&mut self, bit: u8, reg: Register) -> u8 {
+    fn res_reg(&mut self, bit: u8, reg: Register) {
         self.registers[reg] = self.res(bit, self.registers[reg]);
-        2
     }
 
-    fn res_hl(&mut self, bit: u8, mmu: &mut impl Memory) -> u8 {
+    fn res_hl(&mut self, bit: u8, mmu: &mut impl Memory) {
         let value = self.read_byte(mmu, self.registers.hl());
         let new_value = self.res(bit, value);
         self.write_byte(mmu, self.registers.hl(), new_value);
-        4
     }
 
     fn set(&mut self, bit: u8, value: u8) -> u8 {
@@ -321,16 +296,14 @@ impl CPU {
         value | mask
     }
 
-    fn set_reg(&mut self, bit: u8, reg: Register) -> u8 {
+    fn set_reg(&mut self, bit: u8, reg: Register) {
         self.registers[reg] = self.set(bit, self.registers[reg]);
-        2
     }
 
-    fn set_hl(&mut self, bit: u8, mmu: &mut impl Memory) -> u8 {
+    fn set_hl(&mut self, bit: u8, mmu: &mut impl Memory) {
         let value = self.read_byte(mmu, self.registers.hl());
         let new_value = self.set(bit, value);
         self.write_byte(mmu, self.registers.hl(), new_value);
-        4
     }
 
     fn swap(&mut self, value: u8) -> u8 {
@@ -341,17 +314,14 @@ impl CPU {
         new_value
     }
 
-    fn swap_reg(&mut self, reg: Register) -> u8 {
+    fn swap_reg(&mut self, reg: Register) {
         self.registers[reg] = self.swap(self.registers[reg]);
-        2
     }
 
-    fn swap_hl(&mut self, mmu: &mut impl Memory) -> u8 {
+    fn swap_hl(&mut self, mmu: &mut impl Memory) {
         let value = self.read_byte(mmu, self.registers.hl());
         let new_value = self.swap(value);
         self.write_byte(mmu, self.registers.hl(), new_value);
-
-        4
     }
 
     /// Read a u16 from address and address+1, and combines them into a single u16
@@ -589,18 +559,18 @@ impl CPU {
         self.pc = address;
     }
 
-    // TODO - is this supposed to return 5 cycles always?
-    fn interrupt_service_routine(&mut self, mmu: &mut impl Memory) -> u8 {
+    // TODO - figure out cycles here
+    fn interrupt_service_routine(&mut self, mmu: &mut impl Memory) {
         if !self.ime {
             trace!("interrupt service routine called but ime is false");
-            return 0;
+            return;
         }
         let if_reg = self.read_byte(mmu, IF_FLAG);
         let ie_reg = self.read_byte(mmu, IE_FLAG);
         let interrupt = if_reg & ie_reg;
         if interrupt == 0 {
             trace!("interrupt service routine called but no interrupts are enabled");
-            return 0;
+            return;
         }
 
         self.ime = false;
@@ -614,28 +584,28 @@ impl CPU {
             trace!("vblank interrupt");
             self.write_byte(mmu, IF_FLAG, if_reg & 0b11111110);
             self.pc = 0x40;
-            return 4;
+            return;
         }
 
         if interrupt & 0b10 != 0 {
             self.write_byte(mmu, IF_FLAG, if_reg & 0b11111101);
             self.pc = 0x48;
-            return 4;
+            return;
         }
 
         if interrupt & 0b100 != 0 {
             self.write_byte(mmu, IF_FLAG, if_reg & 0b11111011);
             self.pc = 0x50;
-            return 4;
+            return;
         }
 
         if interrupt & 0b10000 != 0 {
             self.write_byte(mmu, IF_FLAG, if_reg & 0b11101111);
             self.pc = 0x60;
-            return 4;
+            return;
         }
 
-        return 0;
+        return;
     }
 
     fn load_reg_from_reg(&mut self, to: Register, from: Register) {
@@ -737,10 +707,7 @@ impl CPU {
 
     pub fn execute(&mut self, opcode: u8, mmu: &mut impl Memory) {
         match opcode {
-            0x00 => {
-                // does this fix the formatting
-                0
-            }
+            0x00 => {}
             0x01 => self.load_reg16_from_pc(BC, mmu),
             0x02 => self.write_byte(mmu, self.registers.bc(), self.registers.a),
             0x03 => self.inc_reg16(mmu, BC),
@@ -985,7 +952,10 @@ impl CPU {
             0x83 => self.add_a(self.registers.e),
             0x84 => self.add_a(self.registers.h),
             0x85 => self.add_a(self.registers.l),
-            0x86 => self.add_a(self.read_byte(mmu, self.registers.hl())),
+            0x86 => {
+                let value = self.read_byte(mmu, self.registers.hl());
+                self.add_a(value);
+            }
             0x87 => self.add_a(self.registers.a),
 
             0x88 => self.add_carry_a(self.registers.b),
@@ -994,7 +964,10 @@ impl CPU {
             0x8B => self.add_carry_a(self.registers.e),
             0x8C => self.add_carry_a(self.registers.h),
             0x8D => self.add_carry_a(self.registers.l),
-            0x8E => self.add_carry_a(self.read_byte(mmu, self.registers.hl())),
+            0x8E => {
+                let value = self.read_byte(mmu, self.registers.hl());
+                self.add_carry_a(value);
+            }
             0x8F => self.add_carry_a(self.registers.a),
 
             0x90 => self.sub_a(self.registers.b),
@@ -1003,7 +976,10 @@ impl CPU {
             0x93 => self.sub_a(self.registers.e),
             0x94 => self.sub_a(self.registers.h),
             0x95 => self.sub_a(self.registers.l),
-            0x96 => self.sub_a(self.read_byte(mmu, self.registers.hl())),
+            0x96 => {
+                let value = self.read_byte(mmu, self.registers.hl());
+                self.sub_a(value);
+            }
             0x97 => self.sub_a(self.registers.a),
 
             0x98 => self.sub_carry_a(self.registers.b),
@@ -1012,7 +988,10 @@ impl CPU {
             0x9B => self.sub_carry_a(self.registers.e),
             0x9C => self.sub_carry_a(self.registers.h),
             0x9D => self.sub_carry_a(self.registers.l),
-            0x9E => self.sub_carry_a(self.read_byte(mmu, self.registers.hl())),
+            0x9E => {
+                let value = self.read_byte(mmu, self.registers.hl());
+                self.sub_carry_a(value);
+            }
             0x9F => self.sub_carry_a(self.registers.a),
 
             0xA0 => self.and_a(self.registers.b),
@@ -1021,7 +1000,10 @@ impl CPU {
             0xA3 => self.and_a(self.registers.e),
             0xA4 => self.and_a(self.registers.h),
             0xA5 => self.and_a(self.registers.l),
-            0xA6 => self.and_a(self.read_byte(mmu, self.registers.hl())),
+            0xA6 => {
+                let value = self.read_byte(mmu, self.registers.hl());
+                self.and_a(value);
+            }
             0xA7 => self.and_a(self.registers.a),
 
             0xA8 => self.xor_a(self.registers.b),
@@ -1030,7 +1012,10 @@ impl CPU {
             0xAB => self.xor_a(self.registers.e),
             0xAC => self.xor_a(self.registers.h),
             0xAD => self.xor_a(self.registers.l),
-            0xAE => self.xor_a(self.read_byte(mmu, self.registers.hl())),
+            0xAE => {
+                let value = self.read_byte(mmu, self.registers.hl());
+                self.xor_a(value);
+            }
             0xAF => self.xor_a(self.registers.a),
 
             0xB0 => self.or_a(self.registers.b),
@@ -1039,7 +1024,10 @@ impl CPU {
             0xB3 => self.or_a(self.registers.e),
             0xB4 => self.or_a(self.registers.h),
             0xB5 => self.or_a(self.registers.l),
-            0xB6 => self.or_a(self.read_byte(mmu, self.registers.hl())),
+            0xB6 => {
+                let value = self.read_byte(mmu, self.registers.hl());
+                self.or_a(value);
+            }
             0xB7 => self.or_a(self.registers.a),
 
             0xB8 => self.cp_a(self.registers.b),
@@ -1048,7 +1036,10 @@ impl CPU {
             0xBB => self.cp_a(self.registers.e),
             0xBC => self.cp_a(self.registers.h),
             0xBD => self.cp_a(self.registers.l),
-            0xBE => self.cp_a(self.read_byte(mmu, self.registers.hl())),
+            0xBE => {
+                let value = self.read_byte(mmu, self.registers.hl());
+                self.cp_a(value);
+            }
             0xBF => self.cp_a(self.registers.a),
 
             0xC0 => self.ret_cc(!self.registers.zero_flag(), mmu),
@@ -1700,9 +1691,8 @@ mod tests {
         mmu.memory[0x100] = 0x00;
         mmu.memory[0x101] = 0x00;
 
-        let cycles = cpu.call(true, &mut mmu);
+        cpu.call(true, &mut mmu);
 
-        assert_eq!(cycles, 6);
         assert_eq!(cpu.pc, 0xABCD);
         assert_eq!(cpu.sp, 0x100);
         assert_eq!(mmu.memory[0x100], 0x02); // pc increments 2, and is pushed
@@ -1715,9 +1705,8 @@ mod tests {
         mmu.memory[0x100] = 0x00;
         mmu.memory[0x101] = 0x00;
 
-        let cycles = cpu.call(false, &mut mmu);
+        cpu.call(false, &mut mmu);
 
-        assert_eq!(cycles, 3);
         assert_eq!(cpu.pc, 2);
         assert_eq!(cpu.sp, 0x102);
         assert_eq!(mmu.memory[0x100], 0x00);
@@ -2065,7 +2054,7 @@ mod tests {
         cpu.pc = 0;
         mmu.memory[0] = 0x10;
 
-        let cycles = cpu.execute(0x38, &mut mmu);
+        cpu.execute(0x38, &mut mmu);
 
         assert_eq!(cpu.pc, 0x11);
     }
@@ -2116,7 +2105,7 @@ mod tests {
         cpu.pc = 0;
         mmu.memory[cpu.pc as usize] = 0x10;
 
-        let cycles = cpu.execute(0x30, &mut mmu);
+        cpu.execute(0x30, &mut mmu);
 
         assert_eq!(cpu.pc, 0x11);
     }
@@ -2207,7 +2196,7 @@ mod tests {
         cpu.registers.f = 0b10000000; // zero, jump_relative
         cpu.pc = 0;
         mmu.memory[cpu.pc as usize] = 0x10;
-        let cycles = cpu.execute(0x28, &mut mmu);
+        cpu.execute(0x28, &mut mmu);
         assert_eq!(cpu.pc, 0x11);
     }
 
@@ -2264,7 +2253,7 @@ mod tests {
         cpu.pc = 0;
         mmu.memory[cpu.pc as usize] = 0x10;
 
-        let cycles = cpu.execute(0x20, &mut mmu);
+        cpu.execute(0x20, &mut mmu);
 
         assert_eq!(cpu.pc, 0x11);
     }
@@ -2443,7 +2432,7 @@ mod tests {
 
         cpu.registers.l = 0xFF;
         cpu.pc = 0x0100;
-        write_byte(0x0100, 0xAB);
+        mmu.write_byte(0x0100, 0xAB);
 
         cpu.execute(0x2E, &mut mmu);
 
@@ -2452,7 +2441,7 @@ mod tests {
 
         cpu.registers.h = 0xFF;
         cpu.pc = 0x0100;
-        write_byte(0x0100, 0xAB);
+        mmu.write_byte(0x0100, 0xAB);
 
         cpu.execute(0x26, &mut mmu);
 
