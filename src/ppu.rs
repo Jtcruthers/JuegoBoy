@@ -19,8 +19,8 @@ impl PPU {
 
     pub fn tick(&mut self) {
         self.cycles += 1;
-        if self.cycles > 114 * 153 {
-            self.cycles -= 114 * 153;
+        if self.cycles == 114 * 154 {
+            self.cycles -= 114 * 154;
         }
 
         self.scan_line = (self.cycles / 114) as u8;

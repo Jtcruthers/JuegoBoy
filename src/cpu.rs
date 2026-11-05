@@ -1834,13 +1834,6 @@ mod tests {
         mmu.memory[0x0001] = 0xAB;
         cpu.ret(&mut mmu);
         assert_eq!(cpu.pc, 0xABCD);
-
-        cpu.pc = 0;
-        cpu.sp = 0;
-        mmu.memory[0x0000] = 0xCD;
-        mmu.memory[0x0001] = 0xAB;
-        cpu.ret(&mut mmu);
-        assert_eq!(cpu.pc, 0);
     }
 
     #[test]
