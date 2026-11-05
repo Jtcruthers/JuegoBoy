@@ -15,6 +15,7 @@ pub struct CPU {
     pc: u16,
     ime: bool,
     halted: bool,
+    halt_bug: bool,
     ei_called: bool,
 }
 
@@ -53,13 +54,21 @@ impl CPU {
             pc: 0x0,
             ime: false,
             halted: false,
+            halt_bug: false,
             ei_called: false,
         }
     }
 
     fn fetch(&mut self, mmu: &mut impl Memory) -> u8 {
         let opcode = self.read_byte(mmu, self.pc);
-        self.pc += 1;
+
+        if self.halt_bug {
+            // halt bug doesnt increment pc
+            self.halt_bug = false;
+        } else {
+            self.pc += 1;
+        }
+
         opcode
     }
 
@@ -75,23 +84,27 @@ impl CPU {
                 return;
             }
 
+            // pending interrupt ends halt state
+            // But ime determines if we handle it
+            self.halted = false;
             if self.ime {
-                self.halted = false;
+                debug!("Interrupts pending, ime true, not halted and handling interrupt");
                 self.interrupt_service_routine(mmu);
-                return;
             } else {
+                debug!("Interrupts pending, ime false, not halted and returning");
                 mmu.tick();
-                self.halted = false;
-                // This is when the halt bug occurs. Interrupt is pending, but IME is false.
-                return;
+                debug!("ticked");
+                // TODO - not sure if we tick when ime is off but pending interrupt ends the halt
+                // Assuming yes since it had to do something to check what's going on, but didn't
+                // run the ISR
             }
+
+            return;
         }
 
         if interrupts_pending > 0 && self.ime {
             trace!("Handling Interrupts: 0b{:08b}", interrupts_pending);
             self.interrupt_service_routine(mmu);
-        } else {
-            trace!("Not handling interrupts");
         }
 
         let opcode = self.fetch(mmu);
@@ -459,9 +472,19 @@ impl CPU {
         self.registers.l = lower;
     }
 
-    fn halt(&mut self) {
-        debug!("halted");
+    fn halt(&mut self, mmu: &mut impl Memory) {
         self.halted = true;
+        if !self.ime && self.get_pending_interrupt(mmu) != 0 {
+            // This is the halt bug
+            // The next opcode ran will not increment pc
+            // and it immediately exits halt
+            self.halted = false;
+            self.halt_bug = true;
+        }
+    }
+
+    fn stop(&mut self) {
+        todo!("stop not implemented")
     }
 
     fn add_a(&mut self, value: u8) {
@@ -594,7 +617,6 @@ impl CPU {
 
         // push pc onto stack taking 2 M-cycles
         let (upper, lower) = self.u16_to_u8s(self.pc);
-        mmu.tick();
         self.sp -= 1;
         self.write_byte(mmu, self.sp, upper);
         self.sp -= 1;
@@ -780,7 +802,7 @@ impl CPU {
                 self.registers
                     .set_flags(false, false, false, self.registers.carry_flag());
             }
-            0x10 => self.halt(), // Should be STOP
+            0x10 => self.stop(), // Should be STOP
             0x11 => self.load_reg16_from_pc(DE, mmu),
             0x12 => self.write_byte(mmu, self.registers.de(), self.registers.a),
             0x13 => self.inc_reg16(mmu, DE),
@@ -967,7 +989,7 @@ impl CPU {
             0x73 => self.load_addr_from_reg(self.registers.hl(), E, mmu),
             0x74 => self.load_addr_from_reg(self.registers.hl(), H, mmu),
             0x75 => self.load_addr_from_reg(self.registers.hl(), L, mmu),
-            0x76 => self.halt(),
+            0x76 => self.halt(mmu),
             0x77 => self.load_addr_from_reg(self.registers.hl(), A, mmu),
 
             0x78 => self.load_reg_from_reg(A, B),
