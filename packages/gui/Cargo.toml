@@ -9,3 +9,5 @@ env_logger = { workspace = true }
 log = { workspace = true }
 
 gameboy_core = { path = "../core" }
+winit = "0.30.13"
+pixels = "0.17.2"

@@ -6,6 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-derive = "1.0.0"
+derive = { workspace = true }
 env_logger = { workspace = true }
 log = { workspace = true }
