@@ -35,7 +35,7 @@ pub struct MMU {
     boot_rom_reg: u8,
     cartridge: Cartridge,
     serial_output: u8,
-    joypad: Joypad,
+    pub joypad: Joypad,
     pub ppu: PPU,
     pub timer: Timer,
     pub apu: APU,

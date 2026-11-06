@@ -2,6 +2,7 @@ use log::*;
 
 use crate::cartridge::Cartridge;
 use crate::cpu::CPU;
+use crate::joypad::Button;
 use crate::mmu::{Memory, MMU};
 
 pub struct Gameboy {
@@ -19,13 +20,6 @@ impl Gameboy {
         }
     }
 
-    // Runs the full gameboy emulation loop, stepping the CPU and MMU until the program ends.
-    pub fn run(&mut self) {
-        loop {
-            self.step();
-        }
-    }
-
     // Steps through 1 M-cycle of the gameboy
     pub fn step(&mut self) {
         self.cpu.step(&mut self.mmu);
@@ -40,5 +34,13 @@ impl Gameboy {
                 self.mmu.read_byte(0xFF44),
             );
         }
+    }
+
+    pub fn press_button(&mut self, button: Button) {
+        self.mmu.joypad.press_button(button);
+    }
+
+    pub fn release_button(&mut self, button: Button) {
+        self.mmu.joypad.release_button(button);
     }
 }
