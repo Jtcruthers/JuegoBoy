@@ -10,3 +10,5 @@ mod registers;
 mod timer;
 
 pub use gameboy::Gameboy;
+
+pub use joypad::Joypad;
