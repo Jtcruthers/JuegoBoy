@@ -2,6 +2,7 @@ use clap::Parser;
 use env_logger;
 use std::fs;
 
+use softbuffer::Context;
 use winit::event_loop::{ControlFlow, EventLoop};
 
 mod app;
@@ -30,7 +31,9 @@ fn main() {
 
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    let mut app = app::App::new(rom);
+    let context = Context::new(event_loop.owned_display_handle()).unwrap();
+
+    let mut app = app::App::new(rom, context);
     match event_loop.run_app(&mut app) {
         Ok(ok) => {
             log::info!("Application exited successfully: {:?}", ok);
