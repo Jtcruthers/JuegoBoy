@@ -5,12 +5,13 @@ use std::time::{Duration, Instant};
 use winit::application::ApplicationHandler;
 use winit::event::{StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, OwnedDisplayHandle};
-use winit::keyboard::KeyCode;
 use winit::window::{Window, WindowId};
 
 use softbuffer::{Context, Surface};
 
-use gameboy_core::{Button, Gameboy};
+use gameboy_core::Gameboy;
+
+use crate::user_input;
 
 // const WIDTH: u32 = 160;
 // const HEIGHT: u32 = 144;
@@ -121,40 +122,9 @@ impl ApplicationHandler for App {
                 println!("The close button was pressed; stopping");
                 event_loop.exit();
             }
-            WindowEvent::KeyboardInput { event, .. } => match event {
-                winit::event::KeyEvent {
-                    physical_key,
-                    state,
-                    ..
-                } => {
-                    let event_button: Option<Button> = match physical_key {
-                        winit::keyboard::PhysicalKey::Code(KeyCode::KeyW) => Some(Button::Up),
-                        winit::keyboard::PhysicalKey::Code(KeyCode::KeyA) => Some(Button::Left),
-                        winit::keyboard::PhysicalKey::Code(KeyCode::KeyS) => Some(Button::Down),
-                        winit::keyboard::PhysicalKey::Code(KeyCode::KeyD) => Some(Button::Right),
-                        winit::keyboard::PhysicalKey::Code(KeyCode::ArrowUp) => Some(Button::A),
-                        winit::keyboard::PhysicalKey::Code(KeyCode::ArrowLeft) => Some(Button::B),
-                        winit::keyboard::PhysicalKey::Code(KeyCode::ArrowRight) => {
-                            Some(Button::Start)
-                        }
-                        winit::keyboard::PhysicalKey::Code(KeyCode::ArrowDown) => {
-                            Some(Button::Select)
-                        }
-                        _ => None,
-                    };
-
-                    if let Some(button) = event_button {
-                        match state {
-                            winit::event::ElementState::Pressed => {
-                                self.gameboy.press_button(button)
-                            }
-                            winit::event::ElementState::Released => {
-                                self.gameboy.release_button(button)
-                            }
-                        };
-                    }
-                }
-            },
+            WindowEvent::KeyboardInput { event, .. } => {
+                user_input::handle_user_input(&mut self.gameboy, event)
+            }
             WindowEvent::RedrawRequested => {
                 let width = surface.window().inner_size().width;
 

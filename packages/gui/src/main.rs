@@ -6,6 +6,7 @@ use softbuffer::Context;
 use winit::event_loop::{ControlFlow, EventLoop};
 
 mod app;
+mod user_input;
 
 #[derive(Parser, Debug)]
 #[command(
