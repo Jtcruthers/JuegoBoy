@@ -27,8 +27,6 @@ pub const INTERRUPT_MASK: u8 = 0b0001_1111;
 
 pub struct MMU {
     wram: [u8; 0x2000],
-    vram: [u8; 0x2000],
-    oam: [u8; 160],
     high_ram: [u8; 0x7F],
     ie_reg: u8,
     if_reg: u8,
@@ -45,8 +43,6 @@ impl MMU {
     pub fn new(cartridge: Cartridge) -> Self {
         MMU {
             wram: [0; 0x2000],
-            vram: [0; 0x2000],
-            oam: [0; 160],
             high_ram: [0; 0x7F],
             ie_reg: 0,
             if_reg: 0,
@@ -138,11 +134,11 @@ impl Memory for MMU {
                 }
             }
             0x4000..=0x7FFF => self.cartridge.read_bank_n(address),
-            0x8000..=0x9FFF => self.vram[(address - 0x8000) as usize],
+            0x8000..=0x9FFF => self.ppu.read_byte(address),
             0xA000..=0xBFFF => self.cartridge.read_ram(address),
             0xC000..=0xDFFF => self.wram[(address - 0xC000) as usize],
             0xE000..=0xFDFF => self.wram[(address - 0xE000) as usize], // echo RAM
-            0xFE00..=0xFE9F => self.oam[(address - 0xFE00) as usize],
+            0xFE00..=0xFE9F => self.ppu.read_byte(address),
             0xFEA0..=0xFEFF => todo!("Not Usable {0:4X}", address), //TODO - Not usable
             0xFF00..=0xFF7F => self.handle_io_read(address),
             0xFF80..=0xFFFE => self.high_ram[(address - 0xFF80) as usize],
@@ -157,11 +153,11 @@ impl Memory for MMU {
         match address {
             0x0000..=0x3FFF => self.cartridge.write_bank_0(address, value),
             0x4000..=0x7FFF => self.cartridge.write_bank_n(address, value),
-            0x8000..=0x9FFF => self.vram[(address - 0x8000) as usize] = value,
+            0x8000..=0x9FFF => self.ppu.write_byte(address, value),
             0xA000..=0xBFFF => self.cartridge.write_ram(address, value),
             0xC000..=0xDFFF => self.wram[(address - 0xC000) as usize] = value,
             0xE000..=0xFDFF => self.wram[(address - 0xE000) as usize] = value, // echo ram
-            0xFE00..=0xFE9F => self.oam[(address - 0xFE00) as usize] = value,
+            0xFE00..=0xFE9F => self.ppu.write_byte(address, value),
             0xFEA0..=0xFEFF => (), // Not usable
             0xFF00..=0xFF7F => self.handle_io_write(address, value),
             0xFF80..=0xFFFE => self.high_ram[(address - 0xFF80) as usize] = value,
