@@ -11,4 +11,4 @@ mod timer;
 
 pub use gameboy::Gameboy;
 
-pub use joypad::Joypad;
+pub use joypad::Button;

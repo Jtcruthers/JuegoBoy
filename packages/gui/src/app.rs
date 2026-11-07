@@ -4,11 +4,12 @@ use std::time::{Duration, Instant};
 use winit::application::ApplicationHandler;
 use winit::event::{KeyEvent, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
+use winit::keyboard::KeyCode;
 use winit::window::{Window, WindowId};
 
 use pixels::{Error, Pixels, SurfaceTexture};
 
-use gameboy_core::Gameboy;
+use gameboy_core::{Button, Gameboy};
 
 const WIDTH: u32 = 320;
 const HEIGHT: u32 = 240;
@@ -59,9 +60,40 @@ impl ApplicationHandler for App {
                 println!("The close button was pressed; stopping");
                 event_loop.exit();
             }
-            WindowEvent::KeyboardInput { .. } => {
-                // Where joystick stuff goes
-            }
+            WindowEvent::KeyboardInput { event, .. } => match event {
+                winit::event::KeyEvent {
+                    physical_key,
+                    state,
+                    ..
+                } => {
+                    let event_button: Option<Button> = match physical_key {
+                        winit::keyboard::PhysicalKey::Code(KeyCode::KeyW) => Some(Button::Up),
+                        winit::keyboard::PhysicalKey::Code(KeyCode::KeyA) => Some(Button::Left),
+                        winit::keyboard::PhysicalKey::Code(KeyCode::KeyS) => Some(Button::Down),
+                        winit::keyboard::PhysicalKey::Code(KeyCode::KeyD) => Some(Button::Right),
+                        winit::keyboard::PhysicalKey::Code(KeyCode::ArrowUp) => Some(Button::A),
+                        winit::keyboard::PhysicalKey::Code(KeyCode::ArrowLeft) => Some(Button::B),
+                        winit::keyboard::PhysicalKey::Code(KeyCode::ArrowRight) => {
+                            Some(Button::Start)
+                        }
+                        winit::keyboard::PhysicalKey::Code(KeyCode::ArrowDown) => {
+                            Some(Button::Select)
+                        }
+                        _ => None,
+                    };
+
+                    if let Some(button) = event_button {
+                        match state {
+                            winit::event::ElementState::Pressed => {
+                                self.gameboy.press_button(button)
+                            }
+                            winit::event::ElementState::Released => {
+                                self.gameboy.release_button(button)
+                            }
+                        };
+                    }
+                }
+            },
             WindowEvent::RedrawRequested => {
                 if let Some(pixels) = self.pixels.as_mut() {
                     for px in pixels.frame_mut().chunks_exact_mut(4) {

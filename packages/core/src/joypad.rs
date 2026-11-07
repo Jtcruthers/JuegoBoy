@@ -1,3 +1,6 @@
+use log::debug;
+
+#[derive(Debug)]
 pub enum Button {
     Start,
     Select,
@@ -24,10 +27,9 @@ impl Button {
     }
 }
 
+const P1_ADDR: u16 = 0xFF00;
 const BUTTON_MASK: u8 = 0b1101_1111;
 const D_PAD_MASK: u8 = 0b1110_1111;
-
-const P1_ADDR: u16 = 0xFF00;
 
 /// Store the state of which buttons are pressed in a separate u8 from p1
 /// If pressed, set it to 0, as p1 does. Otherwise, set 1.
@@ -115,6 +117,10 @@ impl Joypad {
             self.interrupt = true;
         }
         self.buttons_pressed &= !bit_to_clear;
+        debug!(
+            "Pressed button {:?}, buttons_pressed: {:08b}",
+            button, self.buttons_pressed
+        );
     }
 
     /// Handle player releasing a single button
@@ -122,6 +128,10 @@ impl Joypad {
         let bit_to_set = 1 << button.bit_position();
 
         self.buttons_pressed |= bit_to_set;
+        debug!(
+            "Released button {:?}, buttons_pressed: {:08b}",
+            button, self.buttons_pressed
+        );
     }
 }
 
