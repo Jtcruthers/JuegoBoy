@@ -79,17 +79,14 @@ impl PPU {
     }
 
     fn get_tile_address(&self, tile_id: u8) -> u16 {
-        if tile_id >= 0x80 {
-            let id = tile_id - 0x80;
-            return 0x8800 + ((id as u16) << 4);
-        }
+        let id: u16 = (tile_id as u16) << 4; // tile_id is middle two bytes of address
 
-        if self.lcdc & 0b0001_0000 != 0 {
-            // 0x8000 method
-            ((tile_id as u16) << 4) + 0x8000
+        if tile_id >= 0x80 {
+            id + 0x8000
+        } else if self.lcdc & 0b0001_0000 != 0 {
+            id + 0x8000
         } else {
-            // 0x8800 method
-            ((tile_id as u16) << 4) + 0x9000
+            id + 0x9000
         }
     }
 
