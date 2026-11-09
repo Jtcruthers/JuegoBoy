@@ -78,6 +78,27 @@ impl PPU {
         return Mode::THREE;
     }
 
+    fn get_tile_address(&self, tile_id: u8) -> u16 {
+        if tile_id >= 0x80 {
+            let id = tile_id - 0x80;
+            return 0x8800 + ((id as u16) << 4);
+        }
+
+        if self.lcdc & 0b0001_0000 != 0 {
+            // 0x8000 method
+            ((tile_id as u16) << 4) + 0x8000
+        } else {
+            // 0x8800 method
+            ((tile_id as u16) << 4) + 0x9000
+        }
+    }
+
+    pub fn get_tile(&self, tile_id: u8) -> [u8; 16] {
+        let tile: [u8; 16] = [0; 16];
+
+        return tile;
+    }
+
     pub fn tick(&mut self) {
         self.cycles += 1;
         if self.cycles == 114 * 154 {
@@ -213,5 +234,41 @@ mod tests {
 
         ppu.write_byte(0xFF41, 0b0111_1111);
         assert_eq!(ppu.read_byte(0xFF41), 0b1111_1000);
+    }
+
+    #[test]
+    fn test_get_tile_address_8000_block_0() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0b0001_0000; // bit 4 set to 1
+
+        assert_eq!(ppu.get_tile_address(0x0), 0x8000);
+        assert_eq!(ppu.get_tile_address(0x7F), 0x87F0);
+    }
+
+    #[test]
+    fn test_get_tile_address_8000_block_1() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0b0001_0000; // bit 4 set to 1
+
+        assert_eq!(ppu.get_tile_address(0x80), 0x8800);
+        assert_eq!(ppu.get_tile_address(0xFF), 0x8FF0);
+    }
+
+    #[test]
+    fn test_get_tile_address_8800_block_2() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0b0000_0000; // bit 4 set to 0
+
+        assert_eq!(ppu.get_tile_address(0), 0x9000);
+        assert_eq!(ppu.get_tile_address(127), 0x97F0);
+    }
+
+    #[test]
+    fn test_get_tile_address_8800_block_1() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0b0000_0000; // bit 4 set to 0
+
+        assert_eq!(ppu.get_tile_address(0x80), 0x8800);
+        assert_eq!(ppu.get_tile_address(0xFF), 0x8FF0);
     }
 }
