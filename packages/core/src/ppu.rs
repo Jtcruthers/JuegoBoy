@@ -91,7 +91,11 @@ impl PPU {
     }
 
     pub fn get_tile(&self, tile_id: u8) -> [u8; 16] {
-        let tile: [u8; 16] = [0; 16];
+        let mut tile: [u8; 16] = [0; 16];
+
+        let address = self.get_tile_address(tile_id);
+        let vram_address = address as usize - 0x8000;
+        tile.copy_from_slice(&self.vram[vram_address..(vram_address + 16)]);
 
         return tile;
     }
@@ -267,5 +271,55 @@ mod tests {
 
         assert_eq!(ppu.get_tile_address(0x80), 0x8800);
         assert_eq!(ppu.get_tile_address(0xFF), 0x8FF0);
+    }
+
+    #[test]
+    fn test_get_tile_block_0() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0b0001_0000; // bit 4 set to 1
+
+        ppu.write_byte(0x8500, 0xAA);
+        ppu.write_byte(0x8501, 0xBB);
+        ppu.write_byte(0x8502, 0xCC);
+        ppu.write_byte(0x850F, 0xFF);
+
+        let tile = ppu.get_tile(0x50);
+        assert_eq!(tile[0], 0xAA);
+        assert_eq!(tile[1], 0xBB);
+        assert_eq!(tile[2], 0xCC);
+        assert_eq!(tile[15], 0xFF);
+    }
+
+    #[test]
+    fn test_get_tile_block_1() {
+        let mut ppu = PPU::new();
+
+        ppu.write_byte(0x8C60, 0xAA);
+        ppu.write_byte(0x8C61, 0xBB);
+        ppu.write_byte(0x8C62, 0xCC);
+        ppu.write_byte(0x8C6F, 0xFF);
+
+        let tile = ppu.get_tile(0xC6);
+        assert_eq!(tile[0], 0xAA);
+        assert_eq!(tile[1], 0xBB);
+        assert_eq!(tile[2], 0xCC);
+        assert_eq!(tile[15], 0xFF);
+    }
+
+    #[test]
+    fn test_get_tile_block_2() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0b0000_0000; // bit 4 set to 0
+
+        ppu.write_byte(0x9500, 0xAA);
+        ppu.write_byte(0x9501, 0xBB);
+        ppu.write_byte(0x9502, 0xCC);
+        ppu.write_byte(0x950F, 0xFF);
+
+        let tile = ppu.get_tile(0x50);
+        assert_eq!(tile[0], 0xAA);
+        assert_eq!(tile[1], 0xBB);
+        assert_eq!(tile[2], 0xCC);
+        assert_eq!(tile[15], 0xFF);
     }
 }
