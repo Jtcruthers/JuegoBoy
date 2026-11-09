@@ -1,3 +1,10 @@
+enum Mode {
+    ZERO,
+    ONE,
+    TWO,
+    THREE,
+}
+
 const VBLANK_START: u64 = 114 * 144;
 
 const LCD_WIDTH: usize = 160;
@@ -29,6 +36,25 @@ impl PPU {
         }
     }
 
+    fn get_mode(&self) -> Mode {
+        if self.cycles >= VBLANK_START {
+            return Mode::ONE;
+        }
+
+        let dots_on_row = self.cycles % DOTS_PER_ROW;
+        if dots_on_row <= DOTS_PER_MODE_2 {
+            return Mode::TWO;
+        }
+
+        // Need to figure out the penalties and stuff
+        // Mode 3 can be variable, nut never mor than 289
+        if dots_on_row <= 289 + DOTS_PER_MODE_2 {
+            return Mode::ZERO;
+        }
+
+        return Mode::THREE;
+    }
+
     pub fn tick(&mut self) {
         self.cycles += 1;
         if self.cycles == 114 * 154 {
@@ -57,8 +83,20 @@ impl PPU {
 
     pub fn read_byte(&self, address: u16) -> u8 {
         match address {
-            0x8000..=0x9FFF => self.vram[(address - 0x8000) as usize],
-            0xFE00..=0xFE9F => self.oam[(address - 0xFE00) as usize],
+            0x8000..=0x9FFF => {
+                match self.get_mode() {
+                    Mode::THREE => 0xFF, // Return garbage as PPU needs it
+                    _ => self.vram[(address - 0x8000) as usize],
+                }
+            }
+            0xFE00..=0xFE9F => {
+                match self.get_mode() {
+                    // Apparently DMA can access this during this time, but nothing else?
+                    Mode::TWO => 0xFF,
+                    Mode::THREE => 0xFF,
+                    _ => self.oam[(address - 0xFE00) as usize],
+                }
+            }
             0xFF40 => 0, // LCDC
             0xFF41 => 0, // STAT
             0xFF42 => 0, // SCY
@@ -71,8 +109,22 @@ impl PPU {
         }
     }
 
-    pub fn write_byte(&mut self, address: u16, _value: u8) {
+    pub fn write_byte(&mut self, address: u16, value: u8) {
         match address {
+            0x8000..=0x9FFF => {
+                match self.get_mode() {
+                    Mode::THREE => (), // Do nothing
+                    _ => self.vram[(address - 0x8000) as usize] = value,
+                }
+            }
+            0xFE00..=0xFE9F => {
+                match self.get_mode() {
+                    // Apparently DMA can access this during this time, but nothing else?
+                    Mode::TWO => (),
+                    Mode::THREE => (),
+                    _ => self.oam[(address - 0xFE00) as usize] = value,
+                }
+            }
             _ => (),
         }
     }
