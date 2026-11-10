@@ -1,6 +1,6 @@
+use log::*;
 use std::num::NonZeroU32;
 use std::rc::Rc;
-use std::time::{Duration, Instant};
 
 use winit::application::ApplicationHandler;
 use winit::event::{StartCause, WindowEvent};
@@ -87,12 +87,15 @@ impl ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        let start = Instant::now();
-        while start.elapsed() < Duration::from_millis(10) {
-            for _ in 0..100000 {
-                self.gameboy.step();
-            }
-        }
+        debug!("about to wait started");
+        self.gameboy.step_frame();
+        debug!("stepped 1 frame");
+
+        let AppState::Running { surface } = &mut self.state else {
+            unreachable!("got about to wait event while not running");
+        };
+        let window = surface.window().clone();
+        window.request_redraw();
     }
 
     fn window_event(
@@ -130,14 +133,22 @@ impl ApplicationHandler for App {
 
                 let mut buffer = surface.buffer_mut().unwrap();
 
-                for (index, pixel) in buffer.iter_mut().enumerate() {
-                    let x = index as u32 % width;
-                    let y = index as u32 / width;
-                    let red = x % 255;
-                    let green = y % 255;
-                    let blue = (x * y) % 255;
+                let frame = self.gameboy.get_frame();
 
-                    *pixel = (red << 16) | (green << 8) | blue;
+                for (index, pixel) in frame.iter().enumerate() {
+                    let x = index as usize % 160;
+                    let y = index as usize / 160;
+                    let value = match pixel {
+                        0b00 => 0xFFFFFF,
+                        0b01 => 0xAAAAAA,
+                        0b10 => 0x555555,
+                        0b11 => 0x0,
+                        _ => {
+                            panic!("Invalid pixel value");
+                        }
+                    };
+
+                    buffer[(y * width as usize + x) as usize] = value;
                 }
 
                 buffer.present().unwrap();

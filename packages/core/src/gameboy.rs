@@ -21,18 +21,20 @@ impl Gameboy {
     }
 
     // Steps through 1 M-cycle of the gameboy
-    pub fn step(&mut self) {
-        self.cpu.step(&mut self.mmu);
+    pub fn step_frame(&mut self) {
+        while self.mmu.ppu.cycles <= 144 {
+            self.cpu.step(&mut self.mmu);
 
-        if self.booting && !self.mmu.boot_rom_active() {
-            self.booting = false;
-            debug!(
-                "Boot ROM finished\n{}\nIE: {:08b} IF: {:08b} LY: {:02X}",
-                self.cpu,
-                self.mmu.read_byte(0xFFFF),
-                self.mmu.read_byte(0xFF0F),
-                self.mmu.read_byte(0xFF44),
-            );
+            if self.booting && !self.mmu.boot_rom_active() {
+                self.booting = false;
+                debug!(
+                    "Boot ROM finished\n{}\nIE: {:08b} IF: {:08b} LY: {:02X}",
+                    self.cpu,
+                    self.mmu.read_byte(0xFFFF),
+                    self.mmu.read_byte(0xFF0F),
+                    self.mmu.read_byte(0xFF44),
+                );
+            }
         }
     }
 
@@ -42,5 +44,9 @@ impl Gameboy {
 
     pub fn release_button(&mut self, button: Button) {
         self.mmu.joypad.release_button(button);
+    }
+
+    pub fn get_frame(&mut self) -> [u8; 160 * 144] {
+        self.mmu.ppu.get_frame()
     }
 }

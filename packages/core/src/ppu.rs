@@ -1,3 +1,5 @@
+use log::*;
+
 enum Mode {
     ZERO,
     ONE,
@@ -29,9 +31,12 @@ pub struct PPU {
     wx: u8,
 
     scan_line: u8,
-    cycles: u64,
+    pub cycles: u64,
     vram: [u8; 0x2000],
     oam: [u8; 160],
+
+    lcd: [u8; TOTAL_PIXELS],
+
     pub interrupt_vblank: bool,
     pub interrupt_stat: bool,
 }
@@ -54,6 +59,7 @@ impl PPU {
             oam: [0; 160],
             scan_line: 0,
             cycles: 0,
+            lcd: [0; TOTAL_PIXELS],
             interrupt_vblank: false,
             interrupt_stat: false,
         }
@@ -128,23 +134,51 @@ impl PPU {
         }
 
         self.scan_line = (self.cycles / 114) as u8;
+
+        // If we just hit a new scan line and its in the visible area, draw it
+        if self.cycles % 114 == 0 && self.scan_line < 144 {
+            self.draw_scanline();
+        }
+
         // Only fires the first time it enters VBlank
         if self.cycles == VBLANK_START {
             self.interrupt_vblank = true;
         }
     }
 
-    /// get_frame returns the array of pixel for the given frame
+    /// get_frame returns the array of pixels for the given frame
     ///
     /// The idea is the emulator will step over the exact number of M-Cycles
     /// to have a frame ready, and then the consumer will call this to render
     /// the frame.
     pub fn get_frame(&self) -> [u8; TOTAL_PIXELS] {
-        let pixel_buffer = [0; TOTAL_PIXELS];
+        debug!("getting frame: {:?}", self.lcd);
+        self.lcd
+    }
 
-        // TODO - calculate a single frame
+    fn draw_scanline(&mut self) {
+        let tile_map_y_index = (self.scan_line / 8) as usize;
+        let mut tile_map_address: usize = if self.lcdc & 0b0100_0000 > 0 {
+            0x9800 - 0x8000
+        } else {
+            0x9C00 - 0x8000
+        };
 
-        return pixel_buffer;
+        tile_map_address += (tile_map_y_index * 0x20) as usize;
+
+        let tile_y_index = (self.scan_line % 8) as usize;
+
+        let lcd_tile_width = LCD_WIDTH / 8;
+
+        for tile_map_x_index in 0..lcd_tile_width {
+            let tile = self.get_tile(self.vram[(tile_map_address + tile_map_x_index) as usize]);
+            let lcd_index = (self.scan_line as usize) * LCD_WIDTH + (tile_map_x_index * 8) as usize;
+            for tile_x_index in 0..8 {
+                let pixel_row = tile[tile_y_index] as u8;
+                let pixel = pixel_row & (0b11 << tile_x_index * 2);
+                self.lcd[lcd_index + tile_x_index] = pixel;
+            }
+        }
     }
 
     pub fn read_byte(&self, address: u16) -> u8 {
