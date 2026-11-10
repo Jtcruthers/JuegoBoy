@@ -150,12 +150,6 @@ impl PPU {
     fn write_pixel_to_lcd(&mut self, tile_row: u16, tile_x_index: usize, tile_map_x_index: usize) {
         let pixel = self.get_pixel_data(tile_row, tile_x_index);
         let lcd_index = self.scan_line as usize * LCD_WIDTH + tile_map_x_index * 8 + tile_x_index;
-        warn!(
-            "Putting pixel {} on lcd for y index {} and x index {}",
-            pixel,
-            self.scan_line as usize * LCD_WIDTH,
-            tile_x_index
-        );
         self.lcd[lcd_index] = pixel;
     }
 
@@ -183,7 +177,7 @@ impl PPU {
         let tiles_per_lcd_width = LCD_WIDTH / 8;
 
         for tile_map_x_index_ in 0..tiles_per_lcd_width {
-            let tile_map_x_index = (tile_map_x_index_ as usize);
+            let tile_map_x_index = tile_map_x_index_ as usize;
             let tile_id = self.vram[(tile_map_address + tile_map_x_index) as usize];
             let tile_row = self.get_tile_row(tile_id, tile_row);
             for tile_x_index in 0..8 {

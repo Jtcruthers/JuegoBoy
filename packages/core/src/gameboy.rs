@@ -24,8 +24,8 @@ impl Gameboy {
     // The PPU will loop back to 0 after it completes a rendering
     // so we can break the loop when we see the previous cycle count is more than the current cycle count
     pub fn step_frame(&mut self) {
-        let initial_cycles = self.mmu.ppu.cycles;
         loop {
+            let initial_cycles = self.mmu.ppu.cycles;
             self.cpu.step(&mut self.mmu);
 
             if self.booting && !self.mmu.boot_rom_active() {
