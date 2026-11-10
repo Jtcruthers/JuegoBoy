@@ -13,7 +13,7 @@ const LCD_WIDTH: usize = 160;
 const LCD_HEIGHT: usize = 144;
 const TOTAL_PIXELS: usize = LCD_WIDTH * LCD_HEIGHT;
 
-const DOTS_PER_M_CYCLE: u64 = 4;
+// const DOTS_PER_M_CYCLE: u64 = 4;
 const DOTS_PER_ROW: u64 = 456;
 const DOTS_PER_MODE_2: u64 = 80;
 
@@ -109,7 +109,7 @@ impl PPU {
         return row;
     }
 
-    pub fn get_tile(&self, tile_id: u8) -> [u16; 8] {
+    fn get_tile(&self, tile_id: u8) -> [u16; 8] {
         let mut tile: [u16; 8] = [0; 8];
 
         let address = self.get_tile_address(tile_id);
@@ -125,6 +125,16 @@ impl PPU {
         }
 
         return tile;
+    }
+
+    fn get_tile_row(&self, tile_id: u8, row_index: u8) -> u16 {
+        let address = self.get_tile_address(tile_id);
+        let vram_address = address as usize - 0x8000 + row_index as usize;
+        // loop over two bytes at a time to combine them into one row of tile
+        let low_byte = self.vram[vram_address];
+        let high_byte = self.vram[vram_address + 1];
+
+        return self.combine_u8s_into_tile_row(low_byte, high_byte);
     }
 
     pub fn tick(&mut self) {
@@ -146,6 +156,48 @@ impl PPU {
         }
     }
 
+    // Draw the entire scanline we are on
+    // Not cycle accurate, but it should be good enough for a first iteration
+    fn draw_scanline(&mut self) {
+        // Tiles are 8 pixels tall, so scanline + scy to get overall index, divide by 8 to get
+        // which row the tile is in
+        let tile_map_y_index = (self.scan_line + self.scy) as usize / 8;
+
+        // Pick which tile map based on lcdc's 6th bit
+        let mut tile_map_address: usize = if self.lcdc & 0b0100_0000 > 0 {
+            0x9800 - 0x8000
+        } else {
+            0x9C00 - 0x8000
+        };
+
+        // the y addresses increment the address by 0x20
+        tile_map_address += (tile_map_y_index * 0x20) as usize;
+
+        // Which row inside of the tile are we on. scanline divide 8 gives us the tilemap row, but
+        // the remainder is which row within the tile we're on
+        let tile_y_index = self.scan_line % 8;
+
+        let tiles_per_lcd_width = LCD_WIDTH / 8;
+
+        for tile_map_x_index in 0..tiles_per_lcd_width {
+            let tile_id = self.vram[(tile_map_address + tile_map_x_index) as usize];
+            let tile_row = self.get_tile_row(tile_id, tile_y_index);
+            for tile_x_index in 0..8 {
+                // iterate through the tile row we're on and put it on the lcd
+                let pixel = tile_row & (0b11 << tile_x_index * 2);
+                let lcd_index =
+                    self.scan_line as usize * LCD_WIDTH + tile_map_x_index * 8 + tile_x_index;
+                warn!(
+                    "Putting pixel {} on lcd for y index {} and x index {}",
+                    pixel,
+                    self.scan_line as usize * LCD_WIDTH,
+                    tile_x_index
+                );
+                self.lcd[lcd_index] = (pixel >> (tile_x_index * 2)) as u8;
+            }
+        }
+    }
+
     /// get_frame returns the array of pixels for the given frame
     ///
     /// The idea is the emulator will step over the exact number of M-Cycles
@@ -154,31 +206,6 @@ impl PPU {
     pub fn get_frame(&self) -> [u8; TOTAL_PIXELS] {
         debug!("getting frame: {:?}", self.lcd);
         self.lcd
-    }
-
-    fn draw_scanline(&mut self) {
-        let tile_map_y_index = (self.scan_line / 8) as usize;
-        let mut tile_map_address: usize = if self.lcdc & 0b0100_0000 > 0 {
-            0x9800 - 0x8000
-        } else {
-            0x9C00 - 0x8000
-        };
-
-        tile_map_address += (tile_map_y_index * 0x20) as usize;
-
-        let tile_y_index = (self.scan_line % 8) as usize;
-
-        let lcd_tile_width = LCD_WIDTH / 8;
-
-        for tile_map_x_index in 0..lcd_tile_width {
-            let tile = self.get_tile(self.vram[(tile_map_address + tile_map_x_index) as usize]);
-            let lcd_index = (self.scan_line as usize) * LCD_WIDTH + (tile_map_x_index * 8) as usize;
-            for tile_x_index in 0..8 {
-                let pixel_row = tile[tile_y_index] as u8;
-                let pixel = pixel_row & (0b11 << tile_x_index * 2);
-                self.lcd[lcd_index + tile_x_index] = pixel;
-            }
-        }
     }
 
     pub fn read_byte(&self, address: u16) -> u8 {
