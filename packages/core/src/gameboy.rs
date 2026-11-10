@@ -4,6 +4,7 @@ use crate::cartridge::Cartridge;
 use crate::cpu::CPU;
 use crate::joypad::Button;
 use crate::mmu::{Memory, MMU};
+use crate::ppu::{LCD_HEIGHT, LCD_WIDTH};
 
 pub struct Gameboy {
     cpu: CPU,

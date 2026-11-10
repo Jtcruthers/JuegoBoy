@@ -3,18 +3,18 @@ use std::num::NonZeroU32;
 use std::rc::Rc;
 
 use winit::application::ApplicationHandler;
+use winit::dpi::LogicalSize;
 use winit::event::{StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, OwnedDisplayHandle};
 use winit::window::{Window, WindowId};
 
 use softbuffer::{Context, Surface};
 
-use gameboy_core::Gameboy;
+use gameboy_core::{Gameboy, LCD_HEIGHT, LCD_WIDTH};
 
 use crate::user_input;
 
-// const WIDTH: u32 = 160;
-// const HEIGHT: u32 = 144;
+const SCALE: usize = 3;
 
 pub struct App {
     gameboy: Gameboy,
@@ -48,7 +48,12 @@ impl ApplicationHandler for App {
     fn new_events(&mut self, event_loop: &ActiveEventLoop, cause: StartCause) {
         if let StartCause::Init = cause {
             // Create window on startup.
-            let window_attrs = Window::default_attributes().with_title("JuegoBoy");
+            let window_attrs = Window::default_attributes()
+                .with_title("JuegoBoy")
+                .with_inner_size(LogicalSize::new(
+                    (LCD_WIDTH * SCALE) as u32,
+                    (LCD_HEIGHT * SCALE) as u32,
+                ));
             let window = event_loop
                 .create_window(window_attrs)
                 .expect("failed creating window");
@@ -129,27 +134,30 @@ impl ApplicationHandler for App {
                 user_input::handle_user_input(&mut self.gameboy, event)
             }
             WindowEvent::RedrawRequested => {
-                let width = surface.window().inner_size().width;
-
-                let mut buffer = surface.buffer_mut().unwrap();
+                let size = surface.window().inner_size();
+                let width = size.width as usize;
+                let height = size.height as usize;
 
                 let frame = self.gameboy.get_frame();
+                let mut buffer = surface.buffer_mut().unwrap();
 
-                for (index, pixel) in frame.iter().enumerate() {
-                    let x = index as usize % 160;
-                    let y = index as usize / 160;
-                    let value = match pixel {
-                        0b00 => 0xFFFFFF,
-                        0b01 => 0xAAAAAA,
-                        0b10 => 0x555555,
-                        0b11 => 0x0,
-                        _ => {
-                            debug_assert!(false, "Invalid pixel value");
-                            0x55BBFF
-                        }
-                    };
-
-                    buffer[(y * width as usize + x) as usize] = value;
+                for adjacent_y in 0..height {
+                    let src_y = adjacent_y * LCD_HEIGHT / height;
+                    for adjacent_x in 0..width {
+                        let src_x = adjacent_x * LCD_WIDTH / width;
+                        let pixel = frame[src_y * LCD_WIDTH + src_x];
+                        let value = match pixel {
+                            0b00 => 0xE0E0E0,
+                            0b01 => 0x88C070,
+                            0b10 => 0x346856,
+                            0b11 => 0x081820,
+                            _ => {
+                                debug_assert!(false, "Invalid pixel value");
+                                0x55BBFF
+                            }
+                        };
+                        buffer[adjacent_y * width + adjacent_x] = value;
+                    }
                 }
 
                 buffer.present().unwrap();

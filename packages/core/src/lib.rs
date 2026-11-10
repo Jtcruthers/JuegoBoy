@@ -12,3 +12,5 @@ mod timer;
 pub use gameboy::Gameboy;
 
 pub use joypad::Button;
+
+pub use ppu::{LCD_HEIGHT, LCD_WIDTH};

@@ -9,8 +9,8 @@ enum Mode {
 
 const VBLANK_START: u64 = 114 * 144;
 
-const LCD_WIDTH: usize = 160;
-const LCD_HEIGHT: usize = 144;
+pub const LCD_WIDTH: usize = 160;
+pub const LCD_HEIGHT: usize = 144;
 const TOTAL_PIXELS: usize = LCD_WIDTH * LCD_HEIGHT;
 
 // const DOTS_PER_M_CYCLE: u64 = 4;
