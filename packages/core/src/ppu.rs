@@ -138,6 +138,27 @@ impl PPU {
         }
     }
 
+    fn get_pixel_data(&self, tile_row: u16, tile_x_index: usize) -> u8 {
+        debug_assert!(tile_x_index < 8, "tile index is greater than 8");
+        let shift_distance = 14 - (tile_x_index * 2);
+        let mask = 0b11 << shift_distance;
+
+        ((tile_row & mask) >> shift_distance) as u8
+    }
+
+    // Take a pixel from a tile and place it on the LCD at a given index
+    fn write_pixel_to_lcd(&mut self, tile_row: u16, tile_x_index: usize, tile_map_x_index: usize) {
+        let pixel = self.get_pixel_data(tile_row, tile_x_index);
+        let lcd_index = self.scan_line as usize * LCD_WIDTH + tile_map_x_index * 8 + tile_x_index;
+        warn!(
+            "Putting pixel {} on lcd for y index {} and x index {}",
+            pixel,
+            self.scan_line as usize * LCD_WIDTH,
+            tile_x_index
+        );
+        self.lcd[lcd_index] = pixel;
+    }
+
     // Draw the entire scanline we are on
     // Not cycle accurate, but it should be good enough for a first iteration
     fn draw_scanline(&mut self) {
@@ -157,26 +178,16 @@ impl PPU {
 
         // Which row inside of the tile are we on. scanline divide 8 gives us the tilemap row, but
         // the remainder is which row within the tile we're on
-        let tile_y_index = self.scan_line % 8;
+        let tile_row = self.scan_line % 8;
 
         let tiles_per_lcd_width = LCD_WIDTH / 8;
 
         for tile_map_x_index_ in 0..tiles_per_lcd_width {
-            let tile_map_x_index = tile_map_x_index_ + self.scx as usize;
+            let tile_map_x_index = (tile_map_x_index_ as usize);
             let tile_id = self.vram[(tile_map_address + tile_map_x_index) as usize];
-            let tile_row = self.get_tile_row(tile_id, tile_y_index);
+            let tile_row = self.get_tile_row(tile_id, tile_row);
             for tile_x_index in 0..8 {
-                // iterate through the tile row we're on and put it on the lcd
-                let pixel = tile_row & (0b11 << tile_x_index * 2);
-                let lcd_index =
-                    self.scan_line as usize * LCD_WIDTH + tile_map_x_index * 8 + tile_x_index;
-                warn!(
-                    "Putting pixel {} on lcd for y index {} and x index {}",
-                    pixel,
-                    self.scan_line as usize * LCD_WIDTH,
-                    tile_x_index
-                );
-                self.lcd[lcd_index] = (pixel >> (tile_x_index * 2)) as u8;
+                self.write_pixel_to_lcd(tile_row, tile_x_index, tile_map_x_index);
             }
         }
     }
@@ -432,5 +443,20 @@ mod tests {
         assert_eq!(ppu.get_tile_row(0x50, 5), 0b00010101_11011100);
         assert_eq!(ppu.get_tile_row(0x50, 6), 0b00110111_01111000);
         assert_eq!(ppu.get_tile_row(0x50, 7), 0b00101111_11100000);
+    }
+
+    #[test]
+    fn test_get_pixel_data() {
+        let ppu = PPU::new();
+
+        let tile_row = 0b00101101_11111001;
+        assert_eq!(ppu.get_pixel_data(tile_row, 0), 0b00);
+        assert_eq!(ppu.get_pixel_data(tile_row, 1), 0b10);
+        assert_eq!(ppu.get_pixel_data(tile_row, 2), 0b11);
+        assert_eq!(ppu.get_pixel_data(tile_row, 3), 0b01);
+        assert_eq!(ppu.get_pixel_data(tile_row, 4), 0b11);
+        assert_eq!(ppu.get_pixel_data(tile_row, 5), 0b11);
+        assert_eq!(ppu.get_pixel_data(tile_row, 6), 0b10);
+        assert_eq!(ppu.get_pixel_data(tile_row, 7), 0b01);
     }
 }

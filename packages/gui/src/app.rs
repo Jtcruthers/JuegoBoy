@@ -144,7 +144,8 @@ impl ApplicationHandler for App {
                         0b10 => 0x555555,
                         0b11 => 0x0,
                         _ => {
-                            panic!("Invalid pixel value");
+                            debug_assert!(false, "Invalid pixel value");
+                            0x55BBFF
                         }
                     };
 
