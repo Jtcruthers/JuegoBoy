@@ -109,30 +109,12 @@ impl PPU {
         return row;
     }
 
-    fn get_tile(&self, tile_id: u8) -> [u16; 8] {
-        let mut tile: [u16; 8] = [0; 8];
-
-        let address = self.get_tile_address(tile_id);
-        let mut vram_address = address as usize - 0x8000;
-        for i in 0..8 {
-            // loop over two bytes at a time to combine them into one row of tile
-            let low_byte = self.vram[vram_address];
-            let high_byte = self.vram[vram_address + 1];
-
-            tile[i] = self.combine_u8s_into_tile_row(low_byte, high_byte);
-
-            vram_address += 2;
-        }
-
-        return tile;
-    }
-
     fn get_tile_row(&self, tile_id: u8, row_index: u8) -> u16 {
         let address = self.get_tile_address(tile_id);
-        let vram_address = address as usize - 0x8000 + row_index as usize;
-        // loop over two bytes at a time to combine them into one row of tile
-        let low_byte = self.vram[vram_address];
-        let high_byte = self.vram[vram_address + 1];
+        let vram_address = address as usize - 0x8000;
+
+        let low_byte = self.vram[vram_address + (2 * row_index) as usize];
+        let high_byte = self.vram[vram_address + (2 * row_index) as usize + 1];
 
         return self.combine_u8s_into_tile_row(low_byte, high_byte);
     }
@@ -163,8 +145,8 @@ impl PPU {
         // which row the tile is in
         let tile_map_y_index = (self.scan_line + self.scy) as usize / 8;
 
-        // Pick which tile map based on lcdc's 6th bit
-        let mut tile_map_address: usize = if self.lcdc & 0b0100_0000 > 0 {
+        // Pick which tile map based on lcdc's 3rd bit
+        let mut tile_map_address: usize = if self.lcdc & 0b0000_1000 == 0 {
             0x9800 - 0x8000
         } else {
             0x9C00 - 0x8000
@@ -179,7 +161,8 @@ impl PPU {
 
         let tiles_per_lcd_width = LCD_WIDTH / 8;
 
-        for tile_map_x_index in 0..tiles_per_lcd_width {
+        for tile_map_x_index_ in 0..tiles_per_lcd_width {
+            let tile_map_x_index = tile_map_x_index_ + self.scx as usize;
             let tile_id = self.vram[(tile_map_address + tile_map_x_index) as usize];
             let tile_row = self.get_tile_row(tile_id, tile_y_index);
             for tile_x_index in 0..8 {
@@ -378,15 +361,14 @@ mod tests {
         ppu.write_byte(0x850E, 0x38);
         ppu.write_byte(0x850F, 0x7C);
 
-        let tile = ppu.get_tile(0x50);
-        assert_eq!(tile[0], 0b00101111_11111000);
-        assert_eq!(tile[1], 0b00110000_00001100);
-        assert_eq!(tile[2], 0b00110000_00001100);
-        assert_eq!(tile[3], 0b00110000_00001100);
-        assert_eq!(tile[4], 0b00110111_11111100);
-        assert_eq!(tile[5], 0b00010101_11011100);
-        assert_eq!(tile[6], 0b00110111_01111000);
-        assert_eq!(tile[7], 0b00101111_11100000);
+        assert_eq!(ppu.get_tile_row(0x50, 0), 0b00101111_11111000);
+        assert_eq!(ppu.get_tile_row(0x50, 1), 0b00110000_00001100);
+        assert_eq!(ppu.get_tile_row(0x50, 2), 0b00110000_00001100);
+        assert_eq!(ppu.get_tile_row(0x50, 3), 0b00110000_00001100);
+        assert_eq!(ppu.get_tile_row(0x50, 4), 0b00110111_11111100);
+        assert_eq!(ppu.get_tile_row(0x50, 5), 0b00010101_11011100);
+        assert_eq!(ppu.get_tile_row(0x50, 6), 0b00110111_01111000);
+        assert_eq!(ppu.get_tile_row(0x50, 7), 0b00101111_11100000);
     }
 
     #[test]
@@ -410,15 +392,14 @@ mod tests {
         ppu.write_byte(0x8C6E, 0x38);
         ppu.write_byte(0x8C6F, 0x7C);
 
-        let tile = ppu.get_tile(0xC6);
-        assert_eq!(tile[0], 0b00101111_11111000);
-        assert_eq!(tile[1], 0b00110000_00001100);
-        assert_eq!(tile[2], 0b00110000_00001100);
-        assert_eq!(tile[3], 0b00110000_00001100);
-        assert_eq!(tile[4], 0b00110111_11111100);
-        assert_eq!(tile[5], 0b00010101_11011100);
-        assert_eq!(tile[6], 0b00110111_01111000);
-        assert_eq!(tile[7], 0b00101111_11100000);
+        assert_eq!(ppu.get_tile_row(0xC6, 0), 0b00101111_11111000);
+        assert_eq!(ppu.get_tile_row(0xC6, 1), 0b00110000_00001100);
+        assert_eq!(ppu.get_tile_row(0xC6, 2), 0b00110000_00001100);
+        assert_eq!(ppu.get_tile_row(0xC6, 3), 0b00110000_00001100);
+        assert_eq!(ppu.get_tile_row(0xC6, 4), 0b00110111_11111100);
+        assert_eq!(ppu.get_tile_row(0xC6, 5), 0b00010101_11011100);
+        assert_eq!(ppu.get_tile_row(0xC6, 6), 0b00110111_01111000);
+        assert_eq!(ppu.get_tile_row(0xC6, 7), 0b00101111_11100000);
     }
 
     #[test]
@@ -443,14 +424,13 @@ mod tests {
         ppu.write_byte(0x950E, 0x38);
         ppu.write_byte(0x950F, 0x7C);
 
-        let tile = ppu.get_tile(0x50);
-        assert_eq!(tile[0], 0b00101111_11111000);
-        assert_eq!(tile[1], 0b00110000_00001100);
-        assert_eq!(tile[2], 0b00110000_00001100);
-        assert_eq!(tile[3], 0b00110000_00001100);
-        assert_eq!(tile[4], 0b00110111_11111100);
-        assert_eq!(tile[5], 0b00010101_11011100);
-        assert_eq!(tile[6], 0b00110111_01111000);
-        assert_eq!(tile[7], 0b00101111_11100000);
+        assert_eq!(ppu.get_tile_row(0x50, 0), 0b00101111_11111000);
+        assert_eq!(ppu.get_tile_row(0x50, 1), 0b00110000_00001100);
+        assert_eq!(ppu.get_tile_row(0x50, 2), 0b00110000_00001100);
+        assert_eq!(ppu.get_tile_row(0x50, 3), 0b00110000_00001100);
+        assert_eq!(ppu.get_tile_row(0x50, 4), 0b00110111_11111100);
+        assert_eq!(ppu.get_tile_row(0x50, 5), 0b00010101_11011100);
+        assert_eq!(ppu.get_tile_row(0x50, 6), 0b00110111_01111000);
+        assert_eq!(ppu.get_tile_row(0x50, 7), 0b00101111_11100000);
     }
 }
