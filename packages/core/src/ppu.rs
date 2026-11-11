@@ -33,9 +33,10 @@ pub struct PPU {
 
     scan_line: u8,
     pub cycles: u64,
+    y_condition: bool,
+
     vram: [u8; 0x2000],
     oam: [u8; 160],
-
     lcd: [u8; TOTAL_PIXELS],
 
     pub interrupt_vblank: bool,
@@ -56,10 +57,13 @@ impl PPU {
             obp1: 0,
             wy: 0,
             wx: 0,
-            vram: [0; 0x2000],
-            oam: [0; 160],
+
             scan_line: 0,
             cycles: 0,
+            y_condition: false,
+
+            vram: [0; 0x2000],
+            oam: [0; 160],
             lcd: [0; TOTAL_PIXELS],
             interrupt_vblank: false,
             interrupt_stat: false,
@@ -138,6 +142,7 @@ impl PPU {
         // Only fires the first time it enters VBlank
         if self.cycles == VBLANK_START {
             self.interrupt_vblank = true;
+            self.y_condition = false;
         }
     }
 
@@ -181,6 +186,10 @@ impl PPU {
     // Draw the entire scanline we are on
     // Not cycle accurate, but it should be good enough for a first iteration
     fn draw_scanline(&mut self) {
+        if self.scan_line == self.wy {
+            self.y_condition = true;
+        }
+
         // Tiles are 8 pixels tall, so scanline + scy to get overall index.
         // Mod by 144 since there are only 144 rows shown, then divide by 8 to get
         // which row the tile is in
@@ -189,8 +198,11 @@ impl PPU {
         let (tile_map_y_id, tile_row_index) = self.get_tile_map_y();
 
         // TODO - optimize this so we dont have to get the same tile row every iteration
-        for lcd_x_index in 0..LCD_WIDTH {
-            let pixel_index = ((lcd_x_index + self.scx as usize) % 256) as u8; // wrap over
+        for counter in 0..LCD_WIDTH {
+            if counter + 7 == self.wx as usize && self.y_condition {
+                // use window instead of background
+            }
+            let pixel_index = ((counter + self.scx as usize) % 256) as u8; // wrap over
             let tile_map_x_id = pixel_index / 8;
             let tile_x_index = pixel_index % 8;
 
@@ -199,7 +211,7 @@ impl PPU {
             let tile_row = self.get_tile_row(tile_id, tile_row_index);
 
             let pixel = self.get_pixel_data(tile_row, tile_x_index);
-            let lcd_index = self.scan_line as usize * LCD_WIDTH + lcd_x_index;
+            let lcd_index = self.scan_line as usize * LCD_WIDTH + counter;
             self.lcd[lcd_index] = pixel;
         }
     }
