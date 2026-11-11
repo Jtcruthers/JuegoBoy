@@ -257,10 +257,11 @@ impl PPU {
     pub fn write_byte(&mut self, address: u16, value: u8) {
         match address {
             0x8000..=0x9FFF => {
-                match self.get_mode() {
-                    Mode::THREE => (), // Do nothing
-                    _ => self.vram[(address - 0x8000) as usize] = value,
-                }
+                // match self.get_mode() {
+                //     Mode::THREE => (), // Do nothing
+                //     _ => self.vram[(address - 0x8000) as usize] = value,
+                // }
+                self.vram[(address - 0x8000) as usize] = value;
             }
             0xFE00..=0xFE9F => {
                 match self.get_mode() {
