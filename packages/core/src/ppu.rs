@@ -146,19 +146,13 @@ impl PPU {
         ((tile_row & mask) >> shift_distance) as u8
     }
 
-    // Take a pixel from a tile and place it on the LCD at a given index
-    fn write_pixel_to_lcd(&mut self, tile_row: u16, tile_x_index: usize, tile_map_x_index: usize) {
-        let pixel = self.get_pixel_data(tile_row, tile_x_index);
-        let lcd_index = self.scan_line as usize * LCD_WIDTH + tile_map_x_index * 8 + tile_x_index;
-        self.lcd[lcd_index] = pixel;
-    }
-
     // Draw the entire scanline we are on
     // Not cycle accurate, but it should be good enough for a first iteration
     fn draw_scanline(&mut self) {
-        // Tiles are 8 pixels tall, so scanline + scy to get overall index, divide by 8 to get
+        // Tiles are 8 pixels tall, so scanline + scy to get overall index.
+        // Mod by 144 since there are only 144 rows shown, then divide by 8 to get
         // which row the tile is in
-        let tile_map_y_index = (self.scan_line + self.scy) as usize / 8;
+        let tile_map_y_index = ((self.scan_line + self.scy) % 144) as usize / 8;
 
         // Pick which tile map based on lcdc's 3rd bit
         let mut tile_map_address: usize = if self.lcdc & 0b0000_1000 == 0 {
@@ -177,11 +171,16 @@ impl PPU {
         let tiles_per_lcd_width = LCD_WIDTH / 8;
 
         for tile_map_x_index_ in 0..tiles_per_lcd_width {
-            let tile_map_x_index = tile_map_x_index_ as usize;
-            let tile_id = self.vram[(tile_map_address + tile_map_x_index) as usize];
+            // 160 x positions, so starting at SCX, start going to the right.
+            // Have to mod by 160 so it wraps around
+            let tile_map_x_index = (tile_map_x_index_ + self.scx as usize) % 31;
+            let tile_id = self.vram[tile_map_address + tile_map_x_index];
             let tile_row = self.get_tile_row(tile_id, tile_row);
             for tile_x_index in 0..8 {
-                self.write_pixel_to_lcd(tile_row, tile_x_index, tile_map_x_index);
+                let pixel = self.get_pixel_data(tile_row, tile_x_index);
+                let lcd_index =
+                    self.scan_line as usize * LCD_WIDTH + tile_map_x_index_ * 8 + tile_x_index;
+                self.lcd[lcd_index] = pixel;
             }
         }
     }
