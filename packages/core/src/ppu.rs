@@ -1,5 +1,6 @@
 use log::*;
 
+#[derive(Debug, PartialEq)]
 enum Mode {
     ZERO,
     ONE,
@@ -70,18 +71,20 @@ impl PPU {
             return Mode::ONE;
         }
 
-        let dots_on_row = self.cycles % DOTS_PER_ROW;
-        if dots_on_row <= DOTS_PER_MODE_2 {
+        let dots = self.cycles * 4;
+        let dots_on_row = dots % DOTS_PER_ROW;
+
+        if dots_on_row < DOTS_PER_MODE_2 {
             return Mode::TWO;
         }
 
         // Need to figure out the penalties and stuff
         // Mode 3 can be variable, nut never mor than 289
         if dots_on_row <= 289 + DOTS_PER_MODE_2 {
-            return Mode::ZERO;
+            return Mode::THREE;
         }
 
-        return Mode::THREE;
+        return Mode::ZERO;
     }
 
     fn get_tile_address(&self, tile_id: u8) -> u16 {
@@ -544,5 +547,47 @@ mod tests {
         assert_eq!(ppu.get_tile_map_address(15, 15), 0x9DEF);
         assert_eq!(ppu.get_tile_map_address(31, 31), 0x9FFF);
         assert_eq!(ppu.get_tile_map_address(5, 20), 0x9E85);
+    }
+
+    #[test]
+    fn tet_get_mode_two_line_0() {
+        let mut ppu = PPU::new();
+
+        ppu.cycles = 0;
+        assert_eq!(ppu.get_mode(), Mode::TWO);
+
+        ppu.cycles = 19;
+        assert_eq!(ppu.get_mode(), Mode::TWO);
+
+        ppu.cycles = 20;
+        assert_ne!(ppu.get_mode(), Mode::TWO);
+    }
+
+    #[test]
+    fn tet_get_mode_two_line_51() {
+        let mut ppu = PPU::new();
+
+        ppu.cycles = 5814;
+        assert_eq!(ppu.get_mode(), Mode::TWO);
+
+        ppu.cycles = 5833;
+        assert_eq!(ppu.get_mode(), Mode::TWO);
+
+        ppu.cycles = 5834;
+        assert_ne!(ppu.get_mode(), Mode::TWO);
+    }
+
+    #[test]
+    fn tet_get_mode_one() {
+        let mut ppu = PPU::new();
+
+        ppu.cycles = 16_415;
+        assert_ne!(ppu.get_mode(), Mode::ONE);
+
+        ppu.cycles = 16_416;
+        assert_eq!(ppu.get_mode(), Mode::ONE);
+
+        ppu.cycles = 17_556;
+        assert_eq!(ppu.get_mode(), Mode::ONE);
     }
 }
