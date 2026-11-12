@@ -24,6 +24,7 @@ pub struct PPU {
     scy: u8,
     scx: u8,
     lyc: u8,
+    wlc: u8,
     dma: u8,
     bgp: u8,
     obp0: u8,
@@ -51,6 +52,7 @@ impl PPU {
             scy: 0,
             scx: 0,
             lyc: 0,
+            wlc: 0,
             dma: 0,
             bgp: 0,
             obp0: 0,
@@ -143,6 +145,7 @@ impl PPU {
         if self.cycles == VBLANK_START {
             self.interrupt_vblank = true;
             self.y_condition = false;
+            self.wlc = 0;
         }
     }
 
@@ -159,7 +162,7 @@ impl PPU {
     ///
     /// If it calculates its the tilemap value at Y = 20 and we're on the second to last row
     /// it would return (20, 6)
-    fn get_tile_map_y(&self) -> (u8, u8) {
+    fn get_background_tile_map_y(&self) -> (u8, u8) {
         debug_assert!(
             self.scan_line < 144,
             "Cant get tile_map_x for scanline over 143"
@@ -171,16 +174,72 @@ impl PPU {
         (y_id, row_index)
     }
 
-    fn get_tile_map_address(&self, x_id: u8, y_id: u8) -> usize {
-        // Pick which tile map based on lcdc's 3rd bit
+    /// gets the tile's y ID for the window, which always starts at 0,0
+    /// Also gets which row within that tile we display for this scanline
+    fn get_window_tile_map_y(&self) -> (u8, u8) {
+        debug_assert!(
+            self.scan_line < 144,
+            "Cant get tile_map_x for scanline over 143"
+        );
+        let number_of_pixels = self.wlc;
+        let y_id = number_of_pixels / 8;
+        let row_index = number_of_pixels % 8;
+
+        (y_id, row_index)
+    }
+
+    fn get_tile_map_address(&self, x_id: u8, y_id: u8, is_window: bool) -> usize {
+        // Pick which tile map based on lcdc's 3rd bit for background
+        // or 6th for window
         // index it off of our shortened vram
-        let base_tile_map_address: usize = if self.lcdc & 0b0000_1000 == 0 {
+        let mask = if is_window { 0b0100_0000 } else { 0b0000_1000 };
+
+        let base_tile_map_address: usize = if self.lcdc & mask == 0 {
             0x9800
         } else {
             0x9C00
         };
 
         base_tile_map_address + (y_id as usize * 0x20) + x_id as usize
+    }
+
+    fn draw_window_pixel(&mut self, counter: usize) {
+        let (tile_map_y_id, tile_row_index) = self.get_window_tile_map_y();
+
+        let pixel_index = counter as u8 + 7 - self.wx; // window doesn't wrap, but is offset by wx
+        let tile_map_x_id = pixel_index / 8;
+        let tile_x_index = pixel_index % 8;
+
+        let tile_map_address = self.get_tile_map_address(tile_map_x_id, tile_map_y_id, true);
+        let tile_id = self.vram[tile_map_address - 0x8000];
+        let tile_row = self.get_tile_row(tile_id, tile_row_index);
+
+        let pixel = self.get_pixel_data(tile_row, tile_x_index);
+        let lcd_index = self.scan_line as usize * LCD_WIDTH + counter;
+        self.lcd[lcd_index] = pixel;
+    }
+
+    fn draw_background_pixel(&mut self, counter: usize) {
+        // Tiles are 8 pixels tall, so scanline + scy to get overall index.
+        // Mod by 256 since the map is 256 pixels tall, then divide by 8 to get
+        // which row the tile is in
+        // Since we mod by 256, the number we get is pixels. So divide by 8 pixels gives us the
+        // tile, and the remainder gives us the tile row
+        // This will be consistent for the entire scanline, but if it wraps around the X,
+        // the address can be lower the futher the scan line writes
+        let (tile_map_y_id, tile_row_index) = self.get_background_tile_map_y();
+
+        let pixel_index = ((counter + self.scx as usize) % 256) as u8; // wrap over
+        let tile_map_x_id = pixel_index / 8;
+        let tile_x_index = pixel_index % 8;
+
+        let tile_map_address = self.get_tile_map_address(tile_map_x_id, tile_map_y_id, false);
+        let tile_id = self.vram[tile_map_address - 0x8000];
+        let tile_row = self.get_tile_row(tile_id, tile_row_index);
+
+        let pixel = self.get_pixel_data(tile_row, tile_x_index);
+        let lcd_index = self.scan_line as usize * LCD_WIDTH + counter;
+        self.lcd[lcd_index] = pixel;
     }
 
     // Draw the entire scanline we are on
@@ -190,29 +249,20 @@ impl PPU {
             self.y_condition = true;
         }
 
-        // Tiles are 8 pixels tall, so scanline + scy to get overall index.
-        // Mod by 144 since there are only 144 rows shown, then divide by 8 to get
-        // which row the tile is in
-        // This will be consistent for the entire scanline, but if it wraps around the X,
-        // the address can be lower the futher the scan line writes
-        let (tile_map_y_id, tile_row_index) = self.get_tile_map_y();
+        let mut wrote_from_window = false;
 
         // TODO - optimize this so we dont have to get the same tile row every iteration
         for counter in 0..LCD_WIDTH {
-            if counter + 7 == self.wx as usize && self.y_condition {
-                // use window instead of background
+            if counter + 7 >= self.wx as usize && self.y_condition && self.lcdc & 0b0010_0000 != 0 {
+                self.draw_window_pixel(counter);
+                wrote_from_window = true;
+            } else {
+                self.draw_background_pixel(counter);
             }
-            let pixel_index = ((counter + self.scx as usize) % 256) as u8; // wrap over
-            let tile_map_x_id = pixel_index / 8;
-            let tile_x_index = pixel_index % 8;
+        }
 
-            let tile_map_address = self.get_tile_map_address(tile_map_x_id, tile_map_y_id);
-            let tile_id = self.vram[tile_map_address - 0x8000];
-            let tile_row = self.get_tile_row(tile_id, tile_row_index);
-
-            let pixel = self.get_pixel_data(tile_row, tile_x_index);
-            let lcd_index = self.scan_line as usize * LCD_WIDTH + counter;
-            self.lcd[lcd_index] = pixel;
+        if wrote_from_window {
+            self.wlc += 1;
         }
     }
 
@@ -491,19 +541,19 @@ mod tests {
         ppu.scy = 0;
 
         ppu.scan_line = 0;
-        assert_eq!(ppu.get_tile_map_y(), (0, 0));
+        assert_eq!(ppu.get_background_tile_map_y(), (0, 0));
 
         ppu.scan_line = 1;
-        assert_eq!(ppu.get_tile_map_y(), (0, 1));
+        assert_eq!(ppu.get_background_tile_map_y(), (0, 1));
 
         ppu.scan_line = 7;
-        assert_eq!(ppu.get_tile_map_y(), (0, 7));
+        assert_eq!(ppu.get_background_tile_map_y(), (0, 7));
 
         ppu.scan_line = 8;
-        assert_eq!(ppu.get_tile_map_y(), (1, 0));
+        assert_eq!(ppu.get_background_tile_map_y(), (1, 0));
 
         ppu.scan_line = 143;
-        assert_eq!(ppu.get_tile_map_y(), (17, 7));
+        assert_eq!(ppu.get_background_tile_map_y(), (17, 7));
     }
 
     #[test]
@@ -512,16 +562,16 @@ mod tests {
         ppu.scy = 10; // starts displaying at 10 pixels down
 
         ppu.scan_line = 0;
-        assert_eq!(ppu.get_tile_map_y(), (1, 2));
+        assert_eq!(ppu.get_background_tile_map_y(), (1, 2));
 
         ppu.scan_line = 5;
-        assert_eq!(ppu.get_tile_map_y(), (1, 7));
+        assert_eq!(ppu.get_background_tile_map_y(), (1, 7));
 
         ppu.scan_line = 6;
-        assert_eq!(ppu.get_tile_map_y(), (2, 0));
+        assert_eq!(ppu.get_background_tile_map_y(), (2, 0));
 
         ppu.scan_line = 143;
-        assert_eq!(ppu.get_tile_map_y(), (19, 1));
+        assert_eq!(ppu.get_background_tile_map_y(), (19, 1));
     }
 
     #[test]
@@ -530,35 +580,57 @@ mod tests {
         ppu.scy = 255; // starts displaying at 255 pixels down
 
         ppu.scan_line = 0;
-        assert_eq!(ppu.get_tile_map_y(), (31, 7));
+        assert_eq!(ppu.get_background_tile_map_y(), (31, 7));
 
         ppu.scan_line = 1;
-        assert_eq!(ppu.get_tile_map_y(), (0, 0));
+        assert_eq!(ppu.get_background_tile_map_y(), (0, 0));
 
         ppu.scan_line = 143;
-        assert_eq!(ppu.get_tile_map_y(), (17, 6));
+        assert_eq!(ppu.get_background_tile_map_y(), (17, 6));
     }
 
     #[test]
-    fn tet_get_tilemap_address_tilemap_0() {
+    fn tet_get_background_tilemap_address_tilemap_0() {
         let mut ppu = PPU::new();
         ppu.lcdc = 0b0000_0000;
 
-        assert_eq!(ppu.get_tile_map_address(0, 0), 0x9800);
-        assert_eq!(ppu.get_tile_map_address(15, 15), 0x99EF);
-        assert_eq!(ppu.get_tile_map_address(31, 31), 0x9BFF);
-        assert_eq!(ppu.get_tile_map_address(5, 20), 0x9A85);
+        assert_eq!(ppu.get_tile_map_address(0, 0, false), 0x9800);
+        assert_eq!(ppu.get_tile_map_address(15, 15, false), 0x99EF);
+        assert_eq!(ppu.get_tile_map_address(31, 31, false), 0x9BFF);
+        assert_eq!(ppu.get_tile_map_address(5, 20, false), 0x9A85);
     }
 
     #[test]
-    fn tet_get_tilemap_address_tilemap_1() {
+    fn tet_get_background_tilemap_address_tilemap_1() {
         let mut ppu = PPU::new();
         ppu.lcdc = 0b0000_1000;
 
-        assert_eq!(ppu.get_tile_map_address(0, 0), 0x9C00);
-        assert_eq!(ppu.get_tile_map_address(15, 15), 0x9DEF);
-        assert_eq!(ppu.get_tile_map_address(31, 31), 0x9FFF);
-        assert_eq!(ppu.get_tile_map_address(5, 20), 0x9E85);
+        assert_eq!(ppu.get_tile_map_address(0, 0, false), 0x9C00);
+        assert_eq!(ppu.get_tile_map_address(15, 15, false), 0x9DEF);
+        assert_eq!(ppu.get_tile_map_address(31, 31, false), 0x9FFF);
+        assert_eq!(ppu.get_tile_map_address(5, 20, false), 0x9E85);
+    }
+
+    #[test]
+    fn tet_get_window_tilemap_address_tilemap_0() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0b0000_0000;
+
+        assert_eq!(ppu.get_tile_map_address(0, 0, true), 0x9800);
+        assert_eq!(ppu.get_tile_map_address(15, 15, true), 0x99EF);
+        assert_eq!(ppu.get_tile_map_address(31, 31, true), 0x9BFF);
+        assert_eq!(ppu.get_tile_map_address(5, 20, true), 0x9A85);
+    }
+
+    #[test]
+    fn tet_get_window_tilemap_address_tilemap_1() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0b0100_0000;
+
+        assert_eq!(ppu.get_tile_map_address(0, 0, true), 0x9C00);
+        assert_eq!(ppu.get_tile_map_address(15, 15, true), 0x9DEF);
+        assert_eq!(ppu.get_tile_map_address(31, 31, true), 0x9FFF);
+        assert_eq!(ppu.get_tile_map_address(5, 20, true), 0x9E85);
     }
 
     #[test]
