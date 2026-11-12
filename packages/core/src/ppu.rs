@@ -2,9 +2,13 @@ use log::*;
 
 #[derive(Debug, PartialEq)]
 enum Mode {
+    /// HBlank
     ZERO,
+    /// VBlank
     ONE,
+    /// OAM Scan
     TWO,
+    /// Drawing pixels
     THREE,
 }
 
@@ -84,9 +88,9 @@ impl PPU {
             return Mode::TWO;
         }
 
-        // Need to figure out the penalties and stuff
-        // Mode 3 can be variable, nut never mor than 289
-        if dots_on_row <= 289 + DOTS_PER_MODE_2 {
+        // TODO - figure out the penalties and stuff
+        // But using minimimum mode 3 until then
+        if dots_on_row <= 172 + DOTS_PER_MODE_2 {
             return Mode::THREE;
         }
 
@@ -136,9 +140,25 @@ impl PPU {
 
         self.scan_line = (self.cycles / 114) as u8;
 
-        // If we just hit a new scan line and its in the visible area, draw it
+        // If we just hit a new scan line and its in the visible area, we oam scan
         if self.cycles % 114 == 0 && self.scan_line < 144 {
+            if self.stat & 0b0010_0000 > 0 {
+                self.interrupt_stat = true;
+            }
+            // Do OAM Scan
+        }
+
+        // We just entered Mode 3, so now we draw the pixels
+        if self.cycles % 114 == 20 && self.scan_line < 144 {
             self.draw_scanline();
+        }
+
+        // 80 + 172 dots is 63, which is the shortest period it can be to reach HBlank
+        // Using this until I figure out penalties
+        if self.cycles % 114 == 63 && self.scan_line < 144 {
+            if self.stat & 0b0000_1000 > 0 {
+                self.interrupt_stat = true;
+            }
         }
 
         // Only fires the first time it enters VBlank
@@ -146,6 +166,11 @@ impl PPU {
             self.interrupt_vblank = true;
             self.y_condition = false;
             self.wlc = 0;
+
+            // stat has mode 1 int select, so flag it on vblank
+            if self.stat & 0b0001_0000 > 0 {
+                self.interrupt_stat = true;
+            }
         }
     }
 
@@ -248,12 +273,15 @@ impl PPU {
         if self.scan_line == self.wy {
             self.y_condition = true;
         }
+        if self.scan_line == self.lyc && self.stat & 0b0100_0000 > 0 {
+            self.interrupt_stat = true;
+        }
 
         let mut wrote_from_window = false;
 
         // TODO - optimize this so we dont have to get the same tile row every iteration
         for counter in 0..LCD_WIDTH {
-            if self.lcdc & 0b1 == 1 {
+            if self.lcdc & 0b1 == 0 {
                 // bg/window is disabled, print blank
                 let lcd_index = self.scan_line as usize * LCD_WIDTH + counter;
                 self.lcd[lcd_index] = 0;
@@ -301,13 +329,23 @@ impl PPU {
             }
             0xFF40 => self.lcdc,
             0xFF41 => {
-                let mut stat = self.stat | 0b1000_0000; // bit 7 is unused
-                let lyc_compare = self.scan_line == self.lyc;
+                // bit 7 is unused so set to 1, clear bottom 3 bits
+                let mut stat = (self.stat | 0b1000_0000) & !(0b11);
 
+                let lyc_compare = self.scan_line == self.lyc;
                 if lyc_compare {
                     stat |= 1 << 2
                 } else {
                     stat &= !(1 << 2)
+                }
+
+                if self.lcdc & 0b1000_0000 > 0 {
+                    stat |= match self.get_mode() {
+                        Mode::ZERO => 0,
+                        Mode::ONE => 0b1,
+                        Mode::TWO => 0b10,
+                        Mode::THREE => 0b11,
+                    }
                 }
 
                 stat
@@ -344,7 +382,7 @@ impl PPU {
                 }
             }
             0xFF40 => self.lcdc = value,
-            0xFF41 => self.stat |= value & 0b1111_1000, // last 3 bits are read-only
+            0xFF41 => self.stat = value, // Can write whatever, as the read-only bits are handled on read
             0xFF42 => self.scy = value,
             0xFF43 => self.scx = value,
             0xFF44 => (), // ly is read-only
@@ -680,5 +718,83 @@ mod tests {
 
         ppu.cycles = 17_556;
         assert_eq!(ppu.get_mode(), Mode::ONE);
+    }
+
+    #[test]
+    fn tet_read_stat_first_bit_set() {
+        let mut ppu = PPU::new();
+        let stat_addr = 0xFF41;
+
+        ppu.stat = 0;
+        assert_eq!(ppu.read_byte(stat_addr) & 0b1000_0000, 0b1000_0000);
+
+        ppu.stat = 0xFF;
+        assert_eq!(ppu.read_byte(stat_addr) & 0b1000_0000, 0b1000_0000);
+    }
+
+    #[test]
+    fn tet_read_stat_3rd_bit_set_when_lyc_equal_lc() {
+        let mut ppu = PPU::new();
+        let stat_addr = 0xFF41;
+
+        ppu.scan_line = 0;
+        ppu.lyc = 0;
+        assert_eq!(ppu.read_byte(stat_addr) & 0b0000_0100, 0b0000_0100);
+
+        ppu.scan_line = 100;
+        ppu.lyc = 100;
+        assert_eq!(ppu.read_byte(stat_addr) & 0b0000_0100, 0b0000_0100);
+    }
+
+    #[test]
+    fn tet_read_stat_3rd_bit_not_set_when_lyc_equal_lc() {
+        let mut ppu = PPU::new();
+        let stat_addr = 0xFF41;
+
+        ppu.scan_line = 0;
+        ppu.lyc = 1;
+        assert_eq!(ppu.read_byte(stat_addr) & 0b0000_0100, 0);
+
+        ppu.scan_line = 1;
+        ppu.lyc = 0;
+        assert_eq!(ppu.read_byte(stat_addr) & 0b0000_0100, 0);
+    }
+
+    #[test]
+    fn test_read_stat_0_and_1_bits_equal_mode() {
+        let mut ppu = PPU::new();
+        let stat_addr = 0xFF41;
+        ppu.lcdc = 0b1000_0000;
+
+        ppu.cycles = 0;
+        assert_eq!(ppu.read_byte(stat_addr) & 0b0000_0011, 2);
+
+        ppu.cycles = 21;
+        assert_eq!(ppu.read_byte(stat_addr) & 0b0000_0011, 3);
+
+        ppu.cycles = 100;
+        assert_eq!(ppu.read_byte(stat_addr) & 0b0000_0011, 0);
+
+        ppu.cycles = 70_000;
+        assert_eq!(ppu.read_byte(stat_addr) & 0b0000_0011, 1);
+    }
+
+    #[test]
+    fn test_read_stat_0_and_1_bits_not_set_ppu_off() {
+        let mut ppu = PPU::new();
+        let stat_addr = 0xFF41;
+        ppu.lcdc = 0b0000_0000;
+
+        ppu.cycles = 0;
+        assert_eq!(ppu.read_byte(stat_addr) & 0b0000_0011, 0);
+
+        ppu.cycles = 21;
+        assert_eq!(ppu.read_byte(stat_addr) & 0b0000_0011, 0);
+
+        ppu.cycles = 100;
+        assert_eq!(ppu.read_byte(stat_addr) & 0b0000_0011, 0);
+
+        ppu.cycles = 70_000;
+        assert_eq!(ppu.read_byte(stat_addr) & 0b0000_0011, 0);
     }
 }
