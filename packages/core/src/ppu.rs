@@ -253,6 +253,13 @@ impl PPU {
 
         // TODO - optimize this so we dont have to get the same tile row every iteration
         for counter in 0..LCD_WIDTH {
+            if self.lcdc & 0b1 == 1 {
+                // bg/window is disabled, print blank
+                let lcd_index = self.scan_line as usize * LCD_WIDTH + counter;
+                self.lcd[lcd_index] = 0;
+                continue;
+            }
+
             if counter + 7 >= self.wx as usize && self.y_condition && self.lcdc & 0b0010_0000 != 0 {
                 self.draw_window_pixel(counter);
                 wrote_from_window = true;
