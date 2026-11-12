@@ -148,6 +148,11 @@ impl PPU {
             // Do OAM Scan
         }
 
+        // If start of scan line matches LYC and LY, set stat interrupt
+        if self.cycles % 114 == 0 && self.scan_line == self.lyc && self.stat & 0b0100_0000 > 0 {
+            self.interrupt_stat = true;
+        }
+
         // We just entered Mode 3, so now we draw the pixels
         if self.cycles % 114 == 20 && self.scan_line < 144 {
             self.draw_scanline();
@@ -273,10 +278,6 @@ impl PPU {
         if self.scan_line == self.wy {
             self.y_condition = true;
         }
-        if self.scan_line == self.lyc && self.stat & 0b0100_0000 > 0 {
-            self.interrupt_stat = true;
-        }
-
         let mut wrote_from_window = false;
 
         // TODO - optimize this so we dont have to get the same tile row every iteration
