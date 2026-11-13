@@ -179,12 +179,30 @@ impl PPU {
         }
     }
 
-    fn get_pixel_data(&self, tile_row: u16, tile_x_index: u8) -> u8 {
+    /// Given a tile_row and tile_x, it calculates and returns the color index
+    fn get_pixel_color_index(&self, tile_row: u16, tile_x_index: u8) -> u8 {
         debug_assert!(tile_x_index < 8, "tile index is greater than 8");
+        // tiles are 16 bits, but we only care about a single pixel which is 2 bits
+        let mask = 0b11;
+        // X = 0 is the two most signifigant bits, so we need to move them 14 over.
+        // Each X after is 2 scoots less
         let shift_distance = 14 - (tile_x_index * 2);
-        let mask = 0b11 << shift_distance;
 
-        ((tile_row & mask) >> shift_distance) as u8
+        ((tile_row >> shift_distance) as u8) & mask
+    }
+
+    fn get_color_from_index(&self, color_index: u8, is_obj: bool) -> u8 {
+        debug_assert!(color_index < 4, "color index is greater than 3");
+        let pallet = self.bgp;
+        if is_obj {
+            // use other pallets
+        }
+        match color_index {
+            3 => (pallet & 0b1100_0000) >> 6,
+            2 => (pallet & 0b0011_0000) >> 4,
+            1 => (pallet & 0b0000_1100) >> 2,
+            _ => pallet & 0b0000_0011,
+        }
     }
 
     /// Based on scan_line and scy, determines the tilemap Y ID and the row number
@@ -244,9 +262,9 @@ impl PPU {
         let tile_id = self.vram[tile_map_address - 0x8000];
         let tile_row = self.get_tile_row(tile_id, tile_row_index);
 
-        let pixel = self.get_pixel_data(tile_row, tile_x_index);
+        let color_index = self.get_pixel_color_index(tile_row, tile_x_index);
         let lcd_index = self.scan_line as usize * LCD_WIDTH + counter;
-        self.lcd[lcd_index] = pixel;
+        self.lcd[lcd_index] = self.get_color_from_index(color_index, false);
     }
 
     fn draw_background_pixel(&mut self, counter: usize) {
@@ -267,9 +285,9 @@ impl PPU {
         let tile_id = self.vram[tile_map_address - 0x8000];
         let tile_row = self.get_tile_row(tile_id, tile_row_index);
 
-        let pixel = self.get_pixel_data(tile_row, tile_x_index);
+        let color_index = self.get_pixel_color_index(tile_row, tile_x_index);
         let lcd_index = self.scan_line as usize * LCD_WIDTH + counter;
-        self.lcd[lcd_index] = pixel;
+        self.lcd[lcd_index] = self.get_color_from_index(color_index, false);
     }
 
     // Draw the entire scanline we are on
@@ -571,14 +589,37 @@ mod tests {
         let ppu = PPU::new();
 
         let tile_row = 0b00101101_11111001;
-        assert_eq!(ppu.get_pixel_data(tile_row, 0), 0b00);
-        assert_eq!(ppu.get_pixel_data(tile_row, 1), 0b10);
-        assert_eq!(ppu.get_pixel_data(tile_row, 2), 0b11);
-        assert_eq!(ppu.get_pixel_data(tile_row, 3), 0b01);
-        assert_eq!(ppu.get_pixel_data(tile_row, 4), 0b11);
-        assert_eq!(ppu.get_pixel_data(tile_row, 5), 0b11);
-        assert_eq!(ppu.get_pixel_data(tile_row, 6), 0b10);
-        assert_eq!(ppu.get_pixel_data(tile_row, 7), 0b01);
+        assert_eq!(ppu.get_pixel_color_index(tile_row, 0), 0b00);
+        assert_eq!(ppu.get_pixel_color_index(tile_row, 1), 0b10);
+        assert_eq!(ppu.get_pixel_color_index(tile_row, 2), 0b11);
+        assert_eq!(ppu.get_pixel_color_index(tile_row, 3), 0b01);
+        assert_eq!(ppu.get_pixel_color_index(tile_row, 4), 0b11);
+        assert_eq!(ppu.get_pixel_color_index(tile_row, 5), 0b11);
+        assert_eq!(ppu.get_pixel_color_index(tile_row, 6), 0b10);
+        assert_eq!(ppu.get_pixel_color_index(tile_row, 7), 0b01);
+    }
+
+    #[test]
+    fn test_get_color_from_index_bg_window() {
+        let mut ppu = PPU::new();
+
+        ppu.bgp = 0b1111_1111;
+        assert_eq!(ppu.get_color_from_index(0, false), 0b11);
+
+        ppu.bgp = 0b0000_0000;
+        assert_eq!(ppu.get_color_from_index(0, false), 0b00);
+
+        ppu.bgp = 0b1110_0100;
+        assert_eq!(ppu.get_color_from_index(0, false), 0b00);
+        assert_eq!(ppu.get_color_from_index(1, false), 0b01);
+        assert_eq!(ppu.get_color_from_index(2, false), 0b10);
+        assert_eq!(ppu.get_color_from_index(3, false), 0b11);
+
+        ppu.bgp = 0b0001_1011;
+        assert_eq!(ppu.get_color_from_index(0, false), 0b11);
+        assert_eq!(ppu.get_color_from_index(1, false), 0b10);
+        assert_eq!(ppu.get_color_from_index(2, false), 0b01);
+        assert_eq!(ppu.get_color_from_index(3, false), 0b00);
     }
 
     #[test]
