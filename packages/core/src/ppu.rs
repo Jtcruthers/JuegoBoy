@@ -161,11 +161,11 @@ impl PPU {
         // We just entered Mode 3, so now we draw the pixels
         if self.cycles % 114 == 20 && self.scan_line < 144 {
             self.draw_scanline();
-        }
 
-        // reset sprite buffer
-        self.sprite_buffer = [0; 10];
-        self.sprite_counter = 0;
+            // reset sprite buffer
+            self.sprite_buffer = [0; 10];
+            self.sprite_counter = 0;
+        }
 
         // 80 + 172 dots is 63, which is the shortest period it can be to reach HBlank
         // Using this until I figure out penalties
@@ -200,12 +200,8 @@ impl PPU {
         ((tile_row >> shift_distance) as u8) & mask
     }
 
-    fn get_color_from_index(&self, color_index: u8, is_obj: bool) -> u8 {
+    fn get_color_from_pallet(&self, color_index: u8, pallet: u8) -> u8 {
         debug_assert!(color_index < 4, "color index is greater than 3");
-        let pallet = self.bgp;
-        if is_obj {
-            // use other pallets
-        }
         match color_index {
             3 => (pallet & 0b1100_0000) >> 6,
             2 => (pallet & 0b0011_0000) >> 4,
@@ -273,7 +269,7 @@ impl PPU {
 
         let color_index = self.get_pixel_color_index(tile_row, tile_x_index);
         let lcd_index = self.scan_line as usize * LCD_WIDTH + counter;
-        self.lcd[lcd_index] = self.get_color_from_index(color_index, false);
+        self.lcd[lcd_index] = self.get_color_from_pallet(color_index, self.bgp);
     }
 
     fn draw_background_pixel(&mut self, counter: usize) {
@@ -296,7 +292,51 @@ impl PPU {
 
         let color_index = self.get_pixel_color_index(tile_row, tile_x_index);
         let lcd_index = self.scan_line as usize * LCD_WIDTH + counter;
-        self.lcd[lcd_index] = self.get_color_from_index(color_index, false);
+        self.lcd[lcd_index] = self.get_color_from_pallet(color_index, self.bgp);
+    }
+
+    fn get_sprite_tile_row(&self, tile_id: u8, y_position: u8) -> u16 {
+        let obj_size = if (self.lcdc & 0b0000_0100) == 0 {
+            8
+        } else {
+            todo!("Need to implement 8x16 sprites")
+        };
+
+        // This method only works for 8x8 sprites currently
+        // TODO - fix this so it works for 8*16 sprites, tile_index has to change too
+        let scanline_with_offset = self.scan_line + 16;
+        let row_index = scanline_with_offset - y_position;
+
+        let vram_address = (tile_id as usize) << 4;
+        let low_byte = self.vram[vram_address + (2 * row_index) as usize];
+        let high_byte = self.vram[vram_address + (2 * row_index) as usize + 1];
+        self.combine_u8s_into_tile_row(low_byte, high_byte)
+    }
+
+    fn get_sprite_tile_x_index(&self, counter: usize, tile_x_position: u8) -> u8 {
+        8 - (tile_x_position - counter as u8)
+    }
+
+    /// Given the x counter and sprite_buffer's index, draw the sprite to the screen
+    fn draw_sprite_pixel(&mut self, counter: usize, sprite_index: u8) {
+        let y_position = self.oam[sprite_index as usize];
+        let x_position = self.oam[sprite_index as usize + 1];
+        let tile_index = self.oam[sprite_index as usize + 2];
+
+        let tile_row = self.get_sprite_tile_row(tile_index, y_position);
+        let tile_x_index = self.get_sprite_tile_x_index(counter, x_position);
+        // TODO - figure out priority on attribute. pandocs says if priority is 1, bg
+        // and window color are drawn over? Seems backwards.
+        let attributes = self.oam[sprite_index as usize + 3];
+
+        let pallet = if attributes & 0b0001_0000 == 0 {
+            self.obp0
+        } else {
+            self.obp1
+        };
+        let color_index = self.get_pixel_color_index(tile_row, tile_x_index);
+        let lcd_index = self.scan_line as usize * LCD_WIDTH + counter;
+        self.lcd[lcd_index] = self.get_color_from_pallet(color_index, pallet);
     }
 
     /// Scans oam for any objects to display and adds their index to the sprite_buffer
@@ -327,6 +367,14 @@ impl PPU {
         }
     }
 
+    fn is_sprite_within_x_bounds(&self, counter: usize, x_position: u8) -> bool {
+        // the oam scan to load the sprites already checked for y position
+        // sprites are 8 pixels wide and they start 8 pixels off the screen
+        // So if the counter is
+        let counter_with_offset = counter as u8 + 8;
+        x_position <= counter_with_offset && counter_with_offset <= x_position + 8
+    }
+
     // Draw the entire scanline we are on
     // Not cycle accurate, but it should be good enough for a first iteration
     fn draw_scanline(&mut self) {
@@ -341,14 +389,35 @@ impl PPU {
                 // bg/window is disabled, print blank
                 let lcd_index = self.scan_line as usize * LCD_WIDTH + counter;
                 self.lcd[lcd_index] = 0;
-                continue;
+                // TODO - optomize this to not draw window/bg if it will be replaced by an obj
+            } else {
+                if counter + 7 >= self.wx as usize
+                    && self.y_condition
+                    && self.lcdc & 0b0010_0000 != 0
+                {
+                    self.draw_window_pixel(counter);
+                    wrote_from_window = true;
+                } else {
+                    self.draw_background_pixel(counter);
+                }
             }
 
-            if counter + 7 >= self.wx as usize && self.y_condition && self.lcdc & 0b0010_0000 != 0 {
-                self.draw_window_pixel(counter);
-                wrote_from_window = true;
-            } else {
-                self.draw_background_pixel(counter);
+            // TODO - optimize not to check objects every pixel
+            if self.lcdc & 0b0000_0010 > 0 {
+                for sprite_buffer_index in 0..self.sprite_counter {
+                    let sprite_index = self.sprite_buffer[sprite_buffer_index as usize];
+                    let x_position = self.oam[sprite_index as usize + 1];
+                    // let attributes = self.oam[sprite_index as usize + 1];
+                    // TODO - figure out priority on attribute. pandocs says if priority is 1, bg
+                    // and window color are drawn over? Seems backwards.
+
+                    // the oam scan to load the sprites already checked for y position, so just
+                    // check the x
+                    if self.is_sprite_within_x_bounds(counter, x_position) {
+                        self.draw_sprite_pixel(counter, sprite_index);
+                        break; // TODO - figure out prioritization of which sprite to draw
+                    }
+                }
             }
         }
 
@@ -638,26 +707,26 @@ mod tests {
     }
 
     #[test]
-    fn test_get_color_from_index_bg_window() {
-        let mut ppu = PPU::new();
+    fn test_get_color_from_pallet() {
+        let ppu = PPU::new();
 
-        ppu.bgp = 0b1111_1111;
-        assert_eq!(ppu.get_color_from_index(0, false), 0b11);
+        let mut bgp = 0b1111_1111;
+        assert_eq!(ppu.get_color_from_pallet(0, bgp), 0b11);
 
-        ppu.bgp = 0b0000_0000;
-        assert_eq!(ppu.get_color_from_index(0, false), 0b00);
+        bgp = 0b0000_0000;
+        assert_eq!(ppu.get_color_from_pallet(0, bgp), 0b00);
 
-        ppu.bgp = 0b1110_0100;
-        assert_eq!(ppu.get_color_from_index(0, false), 0b00);
-        assert_eq!(ppu.get_color_from_index(1, false), 0b01);
-        assert_eq!(ppu.get_color_from_index(2, false), 0b10);
-        assert_eq!(ppu.get_color_from_index(3, false), 0b11);
+        bgp = 0b1110_0100;
+        assert_eq!(ppu.get_color_from_pallet(0, bgp), 0b00);
+        assert_eq!(ppu.get_color_from_pallet(1, bgp), 0b01);
+        assert_eq!(ppu.get_color_from_pallet(2, bgp), 0b10);
+        assert_eq!(ppu.get_color_from_pallet(3, bgp), 0b11);
 
-        ppu.bgp = 0b0001_1011;
-        assert_eq!(ppu.get_color_from_index(0, false), 0b11);
-        assert_eq!(ppu.get_color_from_index(1, false), 0b10);
-        assert_eq!(ppu.get_color_from_index(2, false), 0b01);
-        assert_eq!(ppu.get_color_from_index(3, false), 0b00);
+        bgp = 0b0001_1011;
+        assert_eq!(ppu.get_color_from_pallet(0, bgp), 0b11);
+        assert_eq!(ppu.get_color_from_pallet(1, bgp), 0b10);
+        assert_eq!(ppu.get_color_from_pallet(2, bgp), 0b01);
+        assert_eq!(ppu.get_color_from_pallet(3, bgp), 0b00);
     }
 
     #[test]
@@ -1006,5 +1075,65 @@ mod tests {
         assert_eq!(ppu.sprite_buffer[7], 28);
         assert_eq!(ppu.sprite_buffer[8], 32);
         assert_eq!(ppu.sprite_buffer[9], 36);
+    }
+
+    #[test]
+    fn test_get_8x8_sprite_tile_row() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0b1000_0000;
+        ppu.scan_line = 0;
+        ppu.write_byte(0x8500, 0x3C);
+        ppu.write_byte(0x8501, 0x7E);
+        ppu.write_byte(0x8502, 0x42);
+        ppu.write_byte(0x8503, 0x42);
+        ppu.write_byte(0x8504, 0x42);
+        ppu.write_byte(0x8505, 0x42);
+        ppu.write_byte(0x8506, 0x42);
+        ppu.write_byte(0x8507, 0x42);
+        ppu.write_byte(0x8508, 0x7E);
+        ppu.write_byte(0x8509, 0x5E);
+        ppu.write_byte(0x850A, 0x7E);
+        ppu.write_byte(0x850B, 0x0A);
+        ppu.write_byte(0x850C, 0x7C);
+        ppu.write_byte(0x850D, 0x56);
+        ppu.write_byte(0x850E, 0x38);
+        ppu.write_byte(0x850F, 0x7C);
+
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 16), 0b00101111_11111000);
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 15), 0b00110000_00001100);
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 14), 0b00110000_00001100);
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 13), 0b00110000_00001100);
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 12), 0b00110111_11111100);
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 11), 0b00010101_11011100);
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 10), 0b00110111_01111000);
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 9), 0b00101111_11100000);
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 8), 0);
+    }
+
+    #[test]
+    fn test_get_sprite_tile_x_index() {
+        let ppu = PPU::new();
+
+        assert_eq!(ppu.get_sprite_tile_x_index(0, 1), 7);
+        assert_eq!(ppu.get_sprite_tile_x_index(0, 8), 0);
+        assert_eq!(ppu.get_sprite_tile_x_index(0, 4), 4);
+
+        assert_eq!(ppu.get_sprite_tile_x_index(7, 8), 7);
+    }
+
+    #[test]
+    fn test_is_sprite_within_x_bounds() {
+        let ppu = PPU::new();
+
+        assert_eq!(ppu.is_sprite_within_x_bounds(0, 0), false);
+        assert_eq!(ppu.is_sprite_within_x_bounds(0, 1), true);
+        assert_eq!(ppu.is_sprite_within_x_bounds(0, 8), true);
+        assert_eq!(ppu.is_sprite_within_x_bounds(0, 9), false);
+
+        assert_eq!(ppu.is_sprite_within_x_bounds(10, 0), false);
+        assert_eq!(ppu.is_sprite_within_x_bounds(10, 10), false);
+        assert_eq!(ppu.is_sprite_within_x_bounds(10, 11), true);
+        assert_eq!(ppu.is_sprite_within_x_bounds(10, 18), true);
+        assert_eq!(ppu.is_sprite_within_x_bounds(10, 19), false);
     }
 }
