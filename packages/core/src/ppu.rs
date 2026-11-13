@@ -39,6 +39,8 @@ pub struct PPU {
     scan_line: u8,
     pub cycles: u64,
     y_condition: bool,
+    sprite_buffer: [u8; 10],
+    sprite_counter: u8,
 
     vram: [u8; 0x2000],
     oam: [u8; 160],
@@ -67,6 +69,8 @@ impl PPU {
             scan_line: 0,
             cycles: 0,
             y_condition: false,
+            sprite_buffer: [0; 10],
+            sprite_counter: 0,
 
             vram: [0; 0x2000],
             oam: [0; 160],
@@ -145,7 +149,8 @@ impl PPU {
             if self.stat & 0b0010_0000 > 0 {
                 self.interrupt_stat = true;
             }
-            // Do OAM Scan
+
+            self.oam_scan();
         }
 
         // If start of scan line matches LYC and LY, set stat interrupt
@@ -157,6 +162,10 @@ impl PPU {
         if self.cycles % 114 == 20 && self.scan_line < 144 {
             self.draw_scanline();
         }
+
+        // reset sprite buffer
+        self.sprite_buffer = [0; 10];
+        self.sprite_counter = 0;
 
         // 80 + 172 dots is 63, which is the shortest period it can be to reach HBlank
         // Using this until I figure out penalties
@@ -290,6 +299,34 @@ impl PPU {
         self.lcd[lcd_index] = self.get_color_from_index(color_index, false);
     }
 
+    /// Scans oam for any objects to display and adds their index to the sprite_buffer
+    fn oam_scan(&mut self) {
+        let obj_enable = (self.lcdc & 0b0000_0010) > 0;
+        if !obj_enable {
+            return;
+        }
+
+        // If true, sprites are 16 pixels tall. Otherwise, just 1 tile, so 8 pixels
+        let obj_size = if (self.lcdc & 0b0000_0100) > 0 { 16 } else { 8 };
+
+        for i in 0..40 {
+            let sprite_index = i * 4;
+            let y_position = self.oam[sprite_index];
+
+            let bottom_y_position = y_position + obj_size;
+            let scanline_with_offset = self.scan_line + 16;
+            if y_position <= scanline_with_offset && bottom_y_position >= scanline_with_offset {
+                self.sprite_buffer[self.sprite_counter as usize] = sprite_index as u8;
+                self.sprite_counter += 1;
+            }
+
+            // buffer is full, quit scanning
+            if self.sprite_counter >= 10 {
+                return;
+            }
+        }
+    }
+
     // Draw the entire scanline we are on
     // Not cycle accurate, but it should be good enough for a first iteration
     fn draw_scanline(&mut self) {
@@ -317,6 +354,7 @@ impl PPU {
 
         if wrote_from_window {
             self.wlc += 1;
+            // 6 dot penalty here
         }
     }
 
@@ -838,5 +876,135 @@ mod tests {
 
         ppu.cycles = 70_000;
         assert_eq!(ppu.read_byte(stat_addr) & 0b0000_0011, 0);
+    }
+
+    #[test]
+    fn test_oam_scan_doesnt_add_obj_off_screen() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0b1000_0010;
+
+        ppu.oam_scan();
+
+        assert_eq!(ppu.sprite_counter, 0);
+        for i in 0..10 {
+            assert_eq!(ppu.sprite_buffer[i], 0);
+        }
+    }
+
+    #[test]
+    fn test_oam_scan_adds_obj_half_off_screen() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0b1000_0010;
+
+        ppu.oam[0] = 10;
+        ppu.oam[4] = 14;
+        ppu.oam_scan();
+
+        assert_eq!(ppu.sprite_counter, 2);
+        assert_eq!(ppu.sprite_buffer[0], 0);
+        assert_eq!(ppu.sprite_buffer[1], 4);
+        assert_eq!(ppu.sprite_buffer[2], 0);
+    }
+
+    #[test]
+    fn test_oam_scan_doesnt_add_obj_when_off() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0b1000_0000;
+
+        ppu.oam[0] = 10;
+        ppu.oam[4] = 14;
+        ppu.oam[8] = 16;
+        ppu.oam[12] = 17;
+        ppu.oam_scan();
+
+        assert_eq!(ppu.sprite_counter, 0);
+        assert_eq!(ppu.sprite_buffer[0], 0);
+        assert_eq!(ppu.sprite_buffer[1], 0);
+        assert_eq!(ppu.sprite_buffer[2], 0);
+    }
+
+    #[test]
+    fn test_oam_scan_adds_obj_on_screen() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0b1000_0010;
+        ppu.scan_line = 0;
+
+        ppu.oam[4] = 16;
+        ppu.oam[16] = 16;
+        ppu.oam[156] = 16;
+        ppu.oam_scan();
+
+        assert_eq!(ppu.sprite_counter, 3);
+        assert_eq!(ppu.sprite_buffer[0], 4);
+        assert_eq!(ppu.sprite_buffer[1], 16);
+        assert_eq!(ppu.sprite_buffer[2], 156);
+    }
+
+    #[test]
+    fn test_oam_scan_adds_obj_on_screen_scanline_moved() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0b1000_0010;
+        ppu.scan_line = 50;
+
+        ppu.oam[4] = 66;
+        ppu.oam[16] = 66;
+        ppu.oam[156] = 66;
+        ppu.oam_scan();
+
+        assert_eq!(ppu.sprite_counter, 3);
+        assert_eq!(ppu.sprite_buffer[0], 4);
+        assert_eq!(ppu.sprite_buffer[1], 16);
+        assert_eq!(ppu.sprite_buffer[2], 156);
+    }
+
+    #[test]
+    fn test_oam_scan_adds_obj_half_off_bottom() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0b1000_0010;
+        ppu.scan_line = 141;
+
+        ppu.oam[4] = 152;
+        ppu.oam[16] = 154;
+        ppu.oam[152] = 156;
+        ppu.oam[156] = 160;
+        ppu.oam_scan();
+
+        assert_eq!(ppu.sprite_counter, 3);
+        assert_eq!(ppu.sprite_buffer[0], 4);
+        assert_eq!(ppu.sprite_buffer[1], 16);
+        assert_eq!(ppu.sprite_buffer[2], 152);
+    }
+
+    #[test]
+    fn test_oam_scan_only_adds_first_10_objects() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0b1000_0010;
+        ppu.scan_line = 0;
+
+        ppu.oam[0] = 16;
+        ppu.oam[4] = 16;
+        ppu.oam[8] = 16;
+        ppu.oam[12] = 16;
+        ppu.oam[16] = 16;
+        ppu.oam[20] = 16;
+        ppu.oam[24] = 16;
+        ppu.oam[28] = 16;
+        ppu.oam[32] = 16;
+        ppu.oam[36] = 16;
+        ppu.oam[40] = 16;
+        ppu.oam[156] = 16;
+        ppu.oam_scan();
+
+        assert_eq!(ppu.sprite_counter, 10);
+        assert_eq!(ppu.sprite_buffer[0], 0);
+        assert_eq!(ppu.sprite_buffer[1], 4);
+        assert_eq!(ppu.sprite_buffer[2], 8);
+        assert_eq!(ppu.sprite_buffer[3], 12);
+        assert_eq!(ppu.sprite_buffer[4], 16);
+        assert_eq!(ppu.sprite_buffer[5], 20);
+        assert_eq!(ppu.sprite_buffer[6], 24);
+        assert_eq!(ppu.sprite_buffer[7], 28);
+        assert_eq!(ppu.sprite_buffer[8], 32);
+        assert_eq!(ppu.sprite_buffer[9], 36);
     }
 }
