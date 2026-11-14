@@ -23,6 +23,8 @@ pub struct App {
     gameboy: Gameboy,
     context: Context<OwnedDisplayHandle>,
     state: AppState,
+    frame_count: usize,
+    last_fps_check: Instant,
 }
 
 #[derive(Debug)]
@@ -43,6 +45,8 @@ impl App {
             gameboy: gameboy,
             context: context,
             state: AppState::Initial,
+            frame_count: 0,
+            last_fps_check: Instant::now(),
         }
     }
 }
@@ -164,6 +168,17 @@ impl ApplicationHandler for App {
                 }
 
                 buffer.present().unwrap();
+
+                self.frame_count += 1;
+                let elapsed = self.last_fps_check.elapsed();
+
+                if elapsed >= Duration::from_secs(1) {
+                    let fps = self.frame_count as f64 / elapsed.as_secs_f64();
+                    println!("FPS: {}", fps);
+
+                    self.frame_count = 0;
+                    self.last_fps_check = Instant::now();
+                }
             }
             _ => (),
         }
