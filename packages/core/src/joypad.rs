@@ -51,7 +51,7 @@ pub struct Joypad {
 impl Joypad {
     pub fn new() -> Self {
         Joypad {
-            buttons_pressed: 0,
+            buttons_pressed: 0xFF,
             p1: 0xFF,
             interrupt: false,
         }
