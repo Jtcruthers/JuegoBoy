@@ -301,7 +301,7 @@ impl PPU {
         self.lcd[lcd_index] = self.get_color_from_pallet(color_index, self.bgp);
     }
 
-    fn get_sprite_tile_row(&self, tile_id: u8, y_position: u8) -> u16 {
+    fn get_sprite_tile_row(&self, tile_id: u8, y_position: u8, should_flip: bool) -> u16 {
         // let obj_size = if (self.lcdc & 0b0000_0100) == 0 {
         //     8
         // } else {
@@ -311,7 +311,14 @@ impl PPU {
         // This method only works for 8x8 sprites currently
         // TODO - fix this so it works for 8*16 sprites, tile_index has to change too
         let scanline_with_offset = self.scan_line + 16;
-        let row_index = scanline_with_offset - y_position;
+        let base_index = scanline_with_offset - y_position;
+        println!("base index: {}", base_index);
+
+        let row_index = if should_flip {
+            7 - base_index
+        } else {
+            base_index
+        };
 
         let vram_address = (tile_id as usize) << 4;
         let low_byte = self.vram[vram_address + (2 * row_index) as usize];
@@ -319,8 +326,13 @@ impl PPU {
         self.combine_u8s_into_tile_row(low_byte, high_byte)
     }
 
-    fn get_sprite_tile_x_index(&self, counter: usize, tile_x_position: u8) -> u8 {
-        8 - (tile_x_position - counter as u8)
+    fn get_sprite_tile_x_index(&self, counter: usize, tile_x_position: u8, x_flip: bool) -> u8 {
+        let base = 8 - (tile_x_position - counter as u8);
+        if x_flip {
+            7 - base
+        } else {
+            base
+        }
     }
 
     /// Given the x counter and sprite_buffer's index, draw the sprite to the screen
@@ -328,9 +340,12 @@ impl PPU {
         let y_position = self.oam[sprite_index as usize];
         let x_position = self.oam[sprite_index as usize + 1];
         let tile_index = self.oam[sprite_index as usize + 2];
+        let attributes = self.oam[sprite_index as usize + 3];
+        let y_flip = attributes & 0b0100_0000 > 0;
+        let x_flip = attributes & 0b0010_0000 > 0;
 
-        let tile_row = self.get_sprite_tile_row(tile_index, y_position);
-        let tile_x_index = self.get_sprite_tile_x_index(counter, x_position);
+        let tile_row = self.get_sprite_tile_row(tile_index, y_position, y_flip);
+        let tile_x_index = self.get_sprite_tile_x_index(counter, x_position, x_flip);
         // TODO - figure out priority on attribute. pandocs says if priority is 1, bg
         // and window color are drawn over? Seems backwards.
         let attributes = self.oam[sprite_index as usize + 3];
@@ -413,9 +428,6 @@ impl PPU {
                 for sprite_buffer_index in 0..self.sprite_counter {
                     let sprite_index = self.sprite_buffer[sprite_buffer_index as usize];
                     let x_position = self.oam[sprite_index as usize + 1];
-                    // let attributes = self.oam[sprite_index as usize + 1];
-                    // TODO - figure out priority on attribute. pandocs says if priority is 1, bg
-                    // and window color are drawn over? Seems backwards.
 
                     // the oam scan to load the sprites already checked for y position, so just
                     // check the x
@@ -1135,26 +1147,90 @@ mod tests {
         ppu.write_byte(0x850E, 0x38);
         ppu.write_byte(0x850F, 0x7C);
 
-        assert_eq!(ppu.get_sprite_tile_row(0x50, 16), 0b00101111_11111000);
-        assert_eq!(ppu.get_sprite_tile_row(0x50, 15), 0b00110000_00001100);
-        assert_eq!(ppu.get_sprite_tile_row(0x50, 14), 0b00110000_00001100);
-        assert_eq!(ppu.get_sprite_tile_row(0x50, 13), 0b00110000_00001100);
-        assert_eq!(ppu.get_sprite_tile_row(0x50, 12), 0b00110111_11111100);
-        assert_eq!(ppu.get_sprite_tile_row(0x50, 11), 0b00010101_11011100);
-        assert_eq!(ppu.get_sprite_tile_row(0x50, 10), 0b00110111_01111000);
-        assert_eq!(ppu.get_sprite_tile_row(0x50, 9), 0b00101111_11100000);
-        assert_eq!(ppu.get_sprite_tile_row(0x50, 8), 0);
+        assert_eq!(
+            ppu.get_sprite_tile_row(0x50, 16, false),
+            0b00101111_11111000
+        );
+        assert_eq!(
+            ppu.get_sprite_tile_row(0x50, 15, false),
+            0b00110000_00001100
+        );
+        assert_eq!(
+            ppu.get_sprite_tile_row(0x50, 14, false),
+            0b00110000_00001100
+        );
+        assert_eq!(
+            ppu.get_sprite_tile_row(0x50, 13, false),
+            0b00110000_00001100
+        );
+        assert_eq!(
+            ppu.get_sprite_tile_row(0x50, 12, false),
+            0b00110111_11111100
+        );
+        assert_eq!(
+            ppu.get_sprite_tile_row(0x50, 11, false),
+            0b00010101_11011100
+        );
+        assert_eq!(
+            ppu.get_sprite_tile_row(0x50, 10, false),
+            0b00110111_01111000
+        );
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 9, false), 0b00101111_11100000);
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 8, false), 0);
+    }
+
+    #[test]
+    fn test_get_8x8_sprite_tile_row_y_flip() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0b1000_0000;
+        ppu.scan_line = 0;
+        ppu.write_byte(0x8500, 0x3C);
+        ppu.write_byte(0x8501, 0x7E);
+        ppu.write_byte(0x8502, 0x42);
+        ppu.write_byte(0x8503, 0x42);
+        ppu.write_byte(0x8504, 0x42);
+        ppu.write_byte(0x8505, 0x42);
+        ppu.write_byte(0x8506, 0x42);
+        ppu.write_byte(0x8507, 0x42);
+        ppu.write_byte(0x8508, 0x7E);
+        ppu.write_byte(0x8509, 0x5E);
+        ppu.write_byte(0x850A, 0x7E);
+        ppu.write_byte(0x850B, 0x0A);
+        ppu.write_byte(0x850C, 0x7C);
+        ppu.write_byte(0x850D, 0x56);
+        ppu.write_byte(0x850E, 0x38);
+        ppu.write_byte(0x850F, 0x7C);
+
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 9, true), 0b00101111_11111000);
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 10, true), 0b00110000_00001100);
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 11, true), 0b00110000_00001100);
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 12, true), 0b00110000_00001100);
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 13, true), 0b00110111_11111100);
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 14, true), 0b00010101_11011100);
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 15, true), 0b00110111_01111000);
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 16, true), 0b00101111_11100000);
     }
 
     #[test]
     fn test_get_sprite_tile_x_index() {
         let ppu = PPU::new();
 
-        assert_eq!(ppu.get_sprite_tile_x_index(0, 1), 7);
-        assert_eq!(ppu.get_sprite_tile_x_index(0, 8), 0);
-        assert_eq!(ppu.get_sprite_tile_x_index(0, 4), 4);
+        assert_eq!(ppu.get_sprite_tile_x_index(0, 1, false), 7);
+        assert_eq!(ppu.get_sprite_tile_x_index(0, 8, false), 0);
+        assert_eq!(ppu.get_sprite_tile_x_index(0, 4, false), 4);
 
-        assert_eq!(ppu.get_sprite_tile_x_index(7, 8), 7);
+        assert_eq!(ppu.get_sprite_tile_x_index(7, 8, false), 7);
+    }
+
+    #[test]
+    fn test_get_sprite_tile_x_index_with_x_flip() {
+        let ppu = PPU::new();
+
+        assert_eq!(ppu.get_sprite_tile_x_index(0, 1, true), 0);
+        assert_eq!(ppu.get_sprite_tile_x_index(0, 8, true), 7);
+        assert_eq!(ppu.get_sprite_tile_x_index(0, 4, true), 3);
+
+        assert_eq!(ppu.get_sprite_tile_x_index(7, 8, true), 0);
     }
 
     #[test]
