@@ -1,11 +1,11 @@
-use log::*;
 use std::num::NonZeroU32;
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{StartCause, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, OwnedDisplayHandle};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, OwnedDisplayHandle};
 use winit::window::{Window, WindowId};
 
 use softbuffer::{Context, Surface};
@@ -15,6 +15,9 @@ use gameboy_core::{Gameboy, LCD_HEIGHT, LCD_WIDTH};
 use crate::user_input;
 
 const SCALE: usize = 3;
+const DOT: usize = 2_usize.pow(22);
+const CYCLES_PER_FRAME: usize = 70224;
+const SECONDS_PER_FRAME: f64 = CYCLES_PER_FRAME as f64 / DOT as f64;
 
 pub struct App {
     gameboy: Gameboy,
@@ -61,6 +64,18 @@ impl ApplicationHandler for App {
                 window: Rc::new(window),
             };
         }
+
+        if let StartCause::ResumeTimeReached { .. } = cause {
+            event_loop.set_control_flow(ControlFlow::WaitUntil(
+                Instant::now() + Duration::from_secs_f64(SECONDS_PER_FRAME),
+            ));
+            let AppState::Running { surface } = &mut self.state else {
+                unreachable!("got about to wait event while not running");
+            };
+            let window = surface.window().clone();
+            self.gameboy.step_frame();
+            window.request_redraw();
+        }
     }
 
     fn resumed(&mut self, _event_loop: &ActiveEventLoop) {
@@ -89,18 +104,6 @@ impl ApplicationHandler for App {
         };
         let window = surface.window().clone();
         self.state = AppState::Suspended { window };
-    }
-
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        debug!("about to wait started");
-        self.gameboy.step_frame();
-        debug!("stepped 1 frame");
-
-        let AppState::Running { surface } = &mut self.state else {
-            unreachable!("got about to wait event while not running");
-        };
-        let window = surface.window().clone();
-        window.request_redraw();
     }
 
     fn window_event(

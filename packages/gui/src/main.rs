@@ -1,6 +1,6 @@
 use clap::Parser;
 use env_logger;
-use std::fs;
+use std::{fs, time::Instant};
 
 use softbuffer::Context;
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -30,7 +30,7 @@ fn main() {
 
     let event_loop = EventLoop::new().unwrap();
 
-    event_loop.set_control_flow(ControlFlow::Poll);
+    event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now()));
 
     let context = Context::new(event_loop.owned_display_handle()).unwrap();
 
