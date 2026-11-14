@@ -359,9 +359,9 @@ impl PPU {
             let sprite_index = i * 4;
             let y_position = self.oam[sprite_index];
 
-            let bottom_y_position = y_position + obj_size;
+            let bottom_y_position = y_position.wrapping_add(obj_size);
             let scanline_with_offset = self.scan_line + 16;
-            if y_position <= scanline_with_offset && bottom_y_position >= scanline_with_offset {
+            if y_position <= scanline_with_offset && bottom_y_position > scanline_with_offset {
                 self.sprite_buffer[self.sprite_counter as usize] = sprite_index as u8;
                 self.sprite_counter += 1;
             }
@@ -378,7 +378,7 @@ impl PPU {
         // sprites are 8 pixels wide and they start 8 pixels off the screen
         // So if the counter is
         let counter_with_offset = counter as u8 + 8;
-        x_position <= counter_with_offset && counter_with_offset <= x_position + 8
+        x_position <= counter_with_offset && counter_with_offset < x_position.wrapping_add(8)
     }
 
     // Draw the entire scanline we are on
@@ -1026,13 +1026,14 @@ mod tests {
 
         ppu.oam[4] = 66;
         ppu.oam[16] = 66;
-        ppu.oam[156] = 66;
+        ppu.oam[152] = 66;
+        ppu.oam[156] = 58;
         ppu.oam_scan();
 
         assert_eq!(ppu.sprite_counter, 3);
         assert_eq!(ppu.sprite_buffer[0], 4);
         assert_eq!(ppu.sprite_buffer[1], 16);
-        assert_eq!(ppu.sprite_buffer[2], 156);
+        assert_eq!(ppu.sprite_buffer[2], 152);
     }
 
     #[test]
@@ -1051,6 +1052,32 @@ mod tests {
         assert_eq!(ppu.sprite_buffer[0], 4);
         assert_eq!(ppu.sprite_buffer[1], 16);
         assert_eq!(ppu.sprite_buffer[2], 152);
+    }
+
+    #[test]
+    fn test_oam_scan_doesnt_overflow_low_object_last_scanline() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0b1000_0010;
+        ppu.scan_line = 143;
+
+        ppu.oam[156] = 160;
+        ppu.oam_scan();
+
+        assert_eq!(ppu.sprite_counter, 0);
+        assert_eq!(ppu.sprite_buffer[0], 0);
+    }
+
+    #[test]
+    fn test_oam_scan_doent_add_obj_too_low() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0b1000_0110;
+        ppu.scan_line = 143;
+
+        ppu.oam[156] = 255;
+        ppu.oam_scan();
+
+        assert_eq!(ppu.sprite_counter, 0);
+        assert_eq!(ppu.sprite_buffer[0], 0);
     }
 
     #[test]
@@ -1144,5 +1171,13 @@ mod tests {
         assert_eq!(ppu.is_sprite_within_x_bounds(10, 11), true);
         assert_eq!(ppu.is_sprite_within_x_bounds(10, 18), true);
         assert_eq!(ppu.is_sprite_within_x_bounds(10, 19), false);
+    }
+
+    #[test]
+    fn test_is_sprite_within_x_bounds_doesnt_overflow() {
+        let ppu = PPU::new();
+
+        // I dont think this can happen since i control counter, but its the equivalent to the sprite-y version
+        assert_eq!(ppu.is_sprite_within_x_bounds(240, 248), false);
     }
 }
