@@ -38,7 +38,7 @@ impl Timer {
 }
 
 impl Memory for Timer {
-    fn read_byte(&mut self, address: u16) -> u8 {
+    fn read_byte(&self, address: u16) -> u8 {
         match address {
             0xFF04 => self.div(),
             0xFF05 => self.tima,

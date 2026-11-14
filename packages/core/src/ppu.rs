@@ -29,21 +29,22 @@ pub struct PPU {
     scx: u8,
     lyc: u8,
     wlc: u8,
-    dma: u8,
+    pub dma: u8,
     bgp: u8,
     obp0: u8,
     obp1: u8,
     wy: u8,
     wx: u8,
 
-    scan_line: u8,
-    pub cycles: u64,
     y_condition: bool,
     sprite_buffer: [u8; 10],
     sprite_counter: u8,
+    scan_line: u8,
+    pub cycles: u64,
+    pub oam_cycles_left: u8,
 
-    vram: [u8; 0x2000],
-    oam: [u8; 160],
+    pub vram: [u8; 0x2000],
+    pub oam: [u8; 160],
     lcd: [u8; TOTAL_PIXELS],
 
     pub interrupt_vblank: bool,
@@ -71,6 +72,7 @@ impl PPU {
             y_condition: false,
             sprite_buffer: [0; 10],
             sprite_counter: 0,
+            oam_cycles_left: 0,
 
             vram: [0; 0x2000],
             oam: [0; 160],
@@ -140,6 +142,10 @@ impl PPU {
         self.cycles += 1;
         if self.cycles == 114 * 154 {
             self.cycles -= 114 * 154;
+        }
+
+        if self.oam_cycles_left > 0 {
+            self.oam_cycles_left -= 1;
         }
 
         self.scan_line = (self.cycles / 114) as u8;
@@ -296,11 +302,11 @@ impl PPU {
     }
 
     fn get_sprite_tile_row(&self, tile_id: u8, y_position: u8) -> u16 {
-        let obj_size = if (self.lcdc & 0b0000_0100) == 0 {
-            8
-        } else {
-            todo!("Need to implement 8x16 sprites")
-        };
+        // let obj_size = if (self.lcdc & 0b0000_0100) == 0 {
+        //     8
+        // } else {
+        //     todo!("Need to implement 8x16 sprites")
+        // };
 
         // This method only works for 8x8 sprites currently
         // TODO - fix this so it works for 8*16 sprites, tile_index has to change too
@@ -513,7 +519,10 @@ impl PPU {
             0xFF43 => self.scx = value,
             0xFF44 => (), // ly is read-only
             0xFF45 => self.lyc = value,
-            0xFF46 => self.dma = value,
+            0xFF46 => {
+                self.oam_cycles_left = 160; // DMA transfer takes 160 cycles to complete
+                self.dma = value
+            }
             0xFF47 => self.bgp = value,
             0xFF48 => self.obp0 = value,
             0xFF49 => self.obp1 = value,

@@ -9,7 +9,7 @@ use crate::ppu::PPU;
 use crate::timer::Timer;
 
 pub trait Memory {
-    fn read_byte(&mut self, address: u16) -> u8;
+    fn read_byte(&self, address: u16) -> u8;
     fn write_byte(&mut self, address: u16, value: u8);
     fn tick(&mut self);
 }
@@ -56,7 +56,7 @@ impl MMU {
         }
     }
 
-    fn handle_io_read(&mut self, address: u16) -> u8 {
+    fn handle_io_read(&self, address: u16) -> u8 {
         // Unused bits in I/O registers always return 1 when read
         // But IE is an acception, as it's an actual 8-bit register
         match address {
@@ -94,11 +94,35 @@ impl MMU {
     pub fn boot_rom_active(&self) -> bool {
         self.boot_rom_reg == 0
     }
+
+    fn handle_oam_dma_transfer(&mut self) {
+        let dma_address = (self.ppu.dma as u16) << 8;
+        match dma_address {
+            0xE000..=0xFFFF => {
+                warn!("DMA from E000-FFFF is not supported, ignoring");
+            }
+            0x8000..=0x9FFF => {
+                for i in 0..160 {
+                    self.ppu.oam[i] = self.ppu.vram[(dma_address + i as u16 - 0x8000) as usize];
+                }
+            }
+            _ => {
+                for i in 0..160 {
+                    self.ppu.oam[i] = self.read_byte(dma_address + i as u16);
+                }
+            }
+        }
+    }
 }
 
 impl Memory for MMU {
     /// Ticks all components, except for the CPU, exactly 1 m-cycle
     fn tick(&mut self) {
+        // On last cycle of oam, copy it over
+        if self.ppu.oam_cycles_left == 1 {
+            self.handle_oam_dma_transfer();
+        }
+
         self.ppu.tick();
         if self.ppu.interrupt_vblank {
             self.if_reg |= 0b1;
@@ -124,7 +148,7 @@ impl Memory for MMU {
         self.apu.tick();
     }
 
-    fn read_byte(&mut self, address: u16) -> u8 {
+    fn read_byte(&self, address: u16) -> u8 {
         let byte = match address {
             0x0000..=0x3FFF => {
                 if self.boot_rom_reg == 0 && address < 0x100 {
@@ -182,7 +206,7 @@ impl TestMMU {
 
 #[cfg(test)]
 impl Memory for TestMMU {
-    fn read_byte(&mut self, address: u16) -> u8 {
+    fn read_byte(&self, address: u16) -> u8 {
         self.memory[address as usize]
     }
 
