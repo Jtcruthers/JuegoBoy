@@ -312,7 +312,7 @@ impl PPU {
         // TODO - fix this so it works for 8*16 sprites, tile_index has to change too
         let scanline_with_offset = self.scan_line + 16;
         let base_index = scanline_with_offset - y_position;
-        println!("base index: {}", base_index);
+        trace!("base index: {}", base_index);
 
         let row_index = if should_flip {
             7 - base_index

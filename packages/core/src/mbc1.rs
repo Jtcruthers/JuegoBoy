@@ -1,5 +1,3 @@
-use log::*;
-
 use crate::cartridge::MBC;
 
 pub struct MBC1 {
@@ -7,28 +5,20 @@ pub struct MBC1 {
     rom_bank: u8,
     ram_bank: u8,
     banking_mode: u8,
-    rom: [u8; 0x20000],
+    rom: Vec<u8>,
     ram: [u8; 0x8000],
 }
 
 impl MBC1 {
     pub fn new(rom: Vec<u8>) -> Self {
-        let mut mbc1 = MBC1 {
+        MBC1 {
             rom_bank: 1,
             ram_bank: 0,
             ram_enabled: false,
             banking_mode: 0,
-            rom: [0; 0x20000],
+            rom: rom,
             ram: [0; 0x8000],
-        };
-
-        trace!("Loading rom into MBC1");
-        for (offset, byte) in rom.iter().enumerate() {
-            mbc1.rom[offset] = *byte;
         }
-        debug!("Done loading rom into MBC1");
-
-        mbc1
     }
 }
 
@@ -42,6 +32,7 @@ impl MBC for MBC1 {
             0 => 0,
             _ => self.rom_bank - 1,
         } as u16;
+
         self.rom[(address + multiplier * 0x4000) as usize]
     }
 
@@ -49,7 +40,8 @@ impl MBC for MBC1 {
         if !self.ram_enabled {
             return 0xFF;
         }
-        self.ram[(address - 0xA000) as usize]
+        let ram_offset = self.ram_bank as usize * 0x2000;
+        self.ram[ram_offset + (address - 0xA000) as usize]
     }
 
     fn write_bank_0(&mut self, address: u16, value: u8) {
@@ -67,7 +59,17 @@ impl MBC for MBC1 {
     fn write_bank_n(&mut self, address: u16, value: u8) {
         match address {
             0x4000..=0x5FFF => {
-                self.ram_bank = value & 0b11;
+                if self.rom.len() >= 0x100000 {
+                    // If it's a 1 MiB ROM or larger, this register sets upper two bits of ROM bank
+                    self.rom_bank &= 0b1001_1111; // clear bits 5 and 6
+                    self.rom_bank |= (value & 0b11) << 5; // set bits 5 and 6 to value's 5 and 6
+                } else {
+                    // If its a 32 KiB ram cart, it selects this.
+                    // Otherwise do nothing, but I don't know how to tell the size of the ram
+                    // cart... so i'll use it for this until then
+                    // TODO - find out how to determine size of ram cart
+                    self.ram_bank = value & 0b11;
+                }
             }
             0x6000..=0x7FFF => {
                 self.banking_mode = value & 0b1;
@@ -89,7 +91,7 @@ mod tests {
 
     #[test]
     fn test_reading_rom_bank_nn() {
-        let mut rom = vec![0; 0x9000];
+        let mut rom = vec![0; 0xFFFF];
         rom[0x8000] = 0xFF; // 8000 is first byte of rom bank 02
 
         let mut mbc1 = MBC1::new(rom);
@@ -140,5 +142,41 @@ mod tests {
         assert_eq!(mbc1.banking_mode, 1);
         mbc1.write_bank_n(0x7FFF, 0);
         assert_eq!(mbc1.banking_mode, 0);
+    }
+
+    #[test]
+    fn test_write_ram_bank_sets_rom() {
+        let mut mbc1 = MBC1::new(vec![0; 0x100000]);
+        mbc1.rom_bank = 0;
+        mbc1.ram_bank = 3;
+        mbc1.write_bank_n(0x4000, 0b11);
+        assert_eq!(mbc1.rom_bank, 0b110_0000);
+        assert_eq!(mbc1.ram_bank, 3);
+
+        mbc1.write_bank_n(0x5FFF, 0b01);
+        assert_eq!(mbc1.rom_bank, 0b010_0000);
+        assert_eq!(mbc1.ram_bank, 3);
+    }
+
+    #[test]
+    fn test_read_ram_bank_nn() {
+        let mut mbc1 = MBC1::new(vec![0; 0x1]);
+        mbc1.ram_enabled = true;
+        mbc1.ram[0] = 0xAA;
+        mbc1.ram[0x2000] = 0xBB;
+        mbc1.ram[0x4000] = 0xCC;
+        mbc1.ram[0x6000] = 0xDD;
+
+        mbc1.ram_bank = 0;
+        assert_eq!(mbc1.read_ram(0xA000), 0xAA);
+
+        mbc1.ram_bank = 1;
+        assert_eq!(mbc1.read_ram(0xA000), 0xBB);
+
+        mbc1.ram_bank = 2;
+        assert_eq!(mbc1.read_ram(0xA000), 0xCC);
+
+        mbc1.ram_bank = 3;
+        assert_eq!(mbc1.read_ram(0xA000), 0xDD);
     }
 }
