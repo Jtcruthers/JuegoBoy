@@ -83,6 +83,11 @@ impl PPU {
     }
 
     fn get_mode(&self) -> Mode {
+        // If lcd is off, we just act like it's VBlank so games have full access to all vram
+        if self.lcdc & 0b1000_0000 == 0 {
+            return Mode::ONE;
+        }
+
         if self.cycles >= VBLANK_START {
             return Mode::ONE;
         }
@@ -139,13 +144,13 @@ impl PPU {
     }
 
     pub fn tick(&mut self) {
-        self.cycles += 1;
-        if self.cycles == 114 * 154 {
-            self.cycles -= 114 * 154;
-        }
-
         if self.oam_cycles_left > 0 {
             self.oam_cycles_left -= 1;
+        }
+
+        // If LCD is off, the PPU doesn't tick, but the OAM DMA still transfers
+        if self.lcdc & 0b1000_0000 == 0 {
+            return;
         }
 
         self.scan_line = (self.cycles / 114) as u8;
@@ -191,6 +196,14 @@ impl PPU {
             if self.stat & 0b0001_0000 > 0 {
                 self.interrupt_stat = true;
             }
+        }
+
+        // After the LCD turn off change, we need to increment cycles at the end
+        // Which makes sense, since the operation is happening on cycle 0, and then it finishes to
+        // increment to 1. Just keep this at the end
+        self.cycles += 1;
+        if self.cycles == 114 * 154 {
+            self.cycles -= 114 * 154;
         }
     }
 
@@ -549,7 +562,15 @@ impl PPU {
                     _ => self.oam[(address - 0xFE00) as usize] = value,
                 }
             }
-            0xFF40 => self.lcdc = value,
+            0xFF40 => {
+                self.lcdc = value;
+                if self.lcdc & 0b1000_0000 == 0 {
+                    // If the lcd is turned off, reset the scanline and cycles
+                    self.scan_line = 0;
+                    self.cycles = 0;
+                    self.lcd = [0; TOTAL_PIXELS]; // Clear the screen when the LCD is turned off
+                }
+            }
             0xFF41 => self.stat = value, // Can write whatever, as the read-only bits are handled on read
             0xFF42 => self.scy = value,
             0xFF43 => self.scx = value,
@@ -829,7 +850,7 @@ mod tests {
     }
 
     #[test]
-    fn tet_get_background_tilemap_address_tilemap_0() {
+    fn test_get_background_tilemap_address_tilemap_0() {
         let mut ppu = PPU::new();
         ppu.lcdc = 0b0000_0000;
 
@@ -840,7 +861,7 @@ mod tests {
     }
 
     #[test]
-    fn tet_get_background_tilemap_address_tilemap_1() {
+    fn test_get_background_tilemap_address_tilemap_1() {
         let mut ppu = PPU::new();
         ppu.lcdc = 0b0000_1000;
 
@@ -851,7 +872,7 @@ mod tests {
     }
 
     #[test]
-    fn tet_get_window_tilemap_address_tilemap_0() {
+    fn test_get_window_tilemap_address_tilemap_0() {
         let mut ppu = PPU::new();
         ppu.lcdc = 0b0000_0000;
 
@@ -862,7 +883,7 @@ mod tests {
     }
 
     #[test]
-    fn tet_get_window_tilemap_address_tilemap_1() {
+    fn test_get_window_tilemap_address_tilemap_1() {
         let mut ppu = PPU::new();
         ppu.lcdc = 0b0100_0000;
 
@@ -873,8 +894,9 @@ mod tests {
     }
 
     #[test]
-    fn tet_get_mode_two_line_0() {
+    fn test_get_mode_two_line_0() {
         let mut ppu = PPU::new();
+        ppu.lcdc = 0b1000_0000;
 
         ppu.cycles = 0;
         assert_eq!(ppu.get_mode(), Mode::TWO);
@@ -887,8 +909,9 @@ mod tests {
     }
 
     #[test]
-    fn tet_get_mode_two_line_51() {
+    fn test_get_mode_two_line_51() {
         let mut ppu = PPU::new();
+        ppu.lcdc = 0b1000_0000;
 
         ppu.cycles = 5814;
         assert_eq!(ppu.get_mode(), Mode::TWO);
@@ -901,8 +924,9 @@ mod tests {
     }
 
     #[test]
-    fn tet_get_mode_one() {
+    fn test_get_mode_one() {
         let mut ppu = PPU::new();
+        ppu.lcdc = 0b1000_0000;
 
         ppu.cycles = 16_415;
         assert_ne!(ppu.get_mode(), Mode::ONE);
@@ -971,6 +995,17 @@ mod tests {
 
         ppu.cycles = 70_000;
         assert_eq!(ppu.read_byte(stat_addr) & 0b0000_0011, 1);
+    }
+
+    #[test]
+    fn test_get_mode_is_vblank_when_lcdc_is_off() {
+        let mut ppu = PPU::new();
+
+        ppu.lcdc = 0b1000_0000;
+        assert_eq!(ppu.get_mode(), Mode::TWO);
+
+        ppu.lcdc = 0b0000_0000;
+        assert_eq!(ppu.get_mode(), Mode::ONE);
     }
 
     #[test]
