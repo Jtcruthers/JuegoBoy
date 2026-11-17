@@ -375,8 +375,6 @@ impl PPU {
 
         let tile_row = self.get_sprite_tile_row(tile_index, y_position, y_flip);
         let tile_x_index = self.get_sprite_tile_x_index(counter, x_position, x_flip);
-        // TODO - figure out priority on attribute. pandocs says if priority is 1, bg
-        // and window color are drawn over? Seems backwards.
         let attributes = self.oam[sprite_index as usize + 3];
 
         let pallet = if attributes & 0b0001_0000 == 0 {
@@ -462,16 +460,30 @@ impl PPU {
 
             // TODO - optimize not to check objects every pixel
             if self.lcdc & 0b0000_0010 > 0 {
+                let mut sprite_to_draw_index = 255;
+                let mut sprite_to_draw_x = 255;
+
+                // Iterate through all the sprites, and check if they are in the x bounds.
+                // If it is in bounds, keep track of the x so we can draw the lowest X sprite.
+                // TODO - I believe this priority only takes affect if the winning sprite isn't
+                // transparent. If it is transparent, the next sprite could show. I'd have to either
+                // keep track of the pixels as well, or move the loop into this draw method. Just
+                // make it "draw_sprites" or something
                 for sprite_buffer_index in 0..self.sprite_counter {
                     let sprite_index = self.sprite_buffer[sprite_buffer_index as usize];
                     let x_position = self.oam[sprite_index as usize + 1];
-
-                    // the oam scan to load the sprites already checked for y position, so just
-                    // check the x
-                    if self.is_sprite_within_x_bounds(counter, x_position) {
-                        self.draw_sprite_pixel(counter, sprite_index);
-                        break; // TODO - figure out prioritization of which sprite to draw
+                    if self.is_sprite_within_x_bounds(counter, x_position)
+                        && sprite_to_draw_x > x_position
+                    {
+                        sprite_to_draw_index = sprite_index;
+                        sprite_to_draw_x = x_position;
                     }
+                }
+
+                // the oam scan to load the sprites already checked for y position, so just
+                // check the x
+                if sprite_to_draw_index != 255 {
+                    self.draw_sprite_pixel(counter, sprite_to_draw_index);
                 }
             }
         }
