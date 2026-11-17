@@ -302,25 +302,41 @@ impl PPU {
     }
 
     fn get_sprite_tile_row(&self, tile_id: u8, y_position: u8, should_flip: bool) -> u16 {
-        // let obj_size = if (self.lcdc & 0b0000_0100) == 0 {
-        //     8
-        // } else {
-        //     todo!("Need to implement 8x16 sprites")
-        // };
+        let obj_size = if (self.lcdc & 0b0000_0100) == 0 {
+            8
+        } else {
+            16
+        };
 
-        // This method only works for 8x8 sprites currently
-        // TODO - fix this so it works for 8*16 sprites, tile_index has to change too
         let scanline_with_offset = self.scan_line + 16;
         let base_index = scanline_with_offset - y_position;
-        trace!("base index: {}", base_index);
 
-        let row_index = if should_flip {
-            7 - base_index
+        let mut row_index = if should_flip {
+            let ceil = if obj_size == 8 { 7 } else { 15 };
+            ceil - base_index
         } else {
             base_index
         };
 
-        let vram_address = (tile_id as usize) << 4;
+        // If obj size is 8, then whatever tile_id we get is the tile
+        // If its an 8x16 obj, the top tile is always even and the bottom tile is always odd
+        // If you pass in 0x50 for a 8x16, but want the bottom 8 rows, it would actually be on
+        // tile_id 0x51. The gameboy also handles this by treating them as a single unit when 8x16,
+        // so tile_id 0x50 and 0x51 would be the "same" tile. So we just pick which one the game
+        // actually means.
+        //
+        // Since our row_index is based on a 16 row tile, if it is over 7 we know they want the
+        // bottom tile, which is only 8 rows. So we trim the row_index and pick the right tile
+        let actual_tile_id = if obj_size == 8 {
+            tile_id
+        } else if row_index < 8 {
+            tile_id & 0xFE // This is the top tile, so it's tile_id with the bottom bit unset
+        } else {
+            row_index -= 8;
+            tile_id | 0b1 // This is the bottom tile, so it's tile_id with the bottom bit set
+        };
+
+        let vram_address = (actual_tile_id as usize) << 4;
         let low_byte = self.vram[vram_address + (2 * row_index) as usize];
         let high_byte = self.vram[vram_address + (2 * row_index) as usize + 1];
         self.combine_u8s_into_tile_row(low_byte, high_byte)
@@ -1209,6 +1225,91 @@ mod tests {
         assert_eq!(ppu.get_sprite_tile_row(0x50, 14, true), 0b00010101_11011100);
         assert_eq!(ppu.get_sprite_tile_row(0x50, 15, true), 0b00110111_01111000);
         assert_eq!(ppu.get_sprite_tile_row(0x50, 16, true), 0b00101111_11100000);
+    }
+
+    #[test]
+    fn test_get_8x16_sprite_tile_row() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0b1000_0100;
+        ppu.write_byte(0x8500, 0x3C);
+        ppu.write_byte(0x8501, 0x7E);
+        ppu.write_byte(0x8502, 0x42);
+        ppu.write_byte(0x8503, 0x42);
+        ppu.write_byte(0x8504, 0x42);
+        ppu.write_byte(0x8505, 0x42);
+
+        ppu.write_byte(0x8510, 0x42);
+        ppu.write_byte(0x8511, 0x42);
+        ppu.write_byte(0x8512, 0x3C);
+        ppu.write_byte(0x8513, 0x7E);
+        ppu.write_byte(0x8514, 0x42);
+        ppu.write_byte(0x8515, 0x42);
+        ppu.write_byte(0x851E, 0x38);
+        ppu.write_byte(0x851F, 0x7C);
+
+        ppu.scan_line = 0;
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 16, false), 0b101111_11111000);
+
+        ppu.scan_line = 1;
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 16, false), 0b110000_00001100);
+
+        ppu.scan_line = 2;
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 16, false), 0b110000_00001100);
+
+        ppu.scan_line = 8;
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 16, false), 0b110000_00001100);
+
+        ppu.scan_line = 9;
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 16, false), 0b101111_11111000);
+
+        ppu.scan_line = 10;
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 16, false), 0b110000_00001100);
+
+        ppu.scan_line = 15;
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 16, false), 0b101111_11100000);
+    }
+
+    #[test]
+    fn test_get_8x16_sprite_tile_row_y_flip() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0b1000_0100;
+        ppu.write_byte(0x8500, 0x3C);
+        ppu.write_byte(0x8501, 0x7E);
+        ppu.write_byte(0x8502, 0x42);
+        ppu.write_byte(0x8503, 0x42);
+        ppu.write_byte(0x851E, 0x38);
+        ppu.write_byte(0x851F, 0x7C);
+
+        ppu.scan_line = 15;
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 16, true), 0b101111_11111000);
+        ppu.scan_line = 14;
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 16, true), 0b00110000_00001100);
+        ppu.scan_line = 0;
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 16, true), 0b101111_11100000);
+    }
+
+    #[test]
+    fn test_get_sprite_tile_row_same_value_for_tile_id_plus_1_when_8x16() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0b1000_0100;
+        ppu.write_byte(0x8500, 0x3C);
+        ppu.write_byte(0x8501, 0x7E);
+        ppu.write_byte(0x850E, 0xFF);
+        ppu.write_byte(0x850F, 0xFF);
+        ppu.write_byte(0x8510, 0x42);
+        ppu.write_byte(0x8511, 0x42);
+
+        ppu.scan_line = 0;
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 16, false), 0b101111_11111000);
+        assert_eq!(ppu.get_sprite_tile_row(0x51, 16, false), 0b101111_11111000);
+
+        ppu.scan_line = 8;
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 16, false), 0b110000_00001100);
+        assert_eq!(ppu.get_sprite_tile_row(0x51, 16, false), 0b110000_00001100);
+
+        ppu.scan_line = 8;
+        assert_eq!(ppu.get_sprite_tile_row(0x50, 16, true), 0xFFFF);
+        assert_eq!(ppu.get_sprite_tile_row(0x51, 16, true), 0xFFFF);
     }
 
     #[test]
