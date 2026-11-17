@@ -372,7 +372,15 @@ impl PPU {
             self.obp1
         };
         let color_index = self.get_pixel_color_index(tile_row, tile_x_index);
+        if color_index == 0 {
+            return; // transparent pixel
+        }
+
         let lcd_index = self.scan_line as usize * LCD_WIDTH + counter;
+        if attributes & 0b1000_0000 > 0 && self.lcd[lcd_index] > 0 {
+            // Priority flag is set, so only draw if bg or window is color 0
+            return;
+        }
         self.lcd[lcd_index] = self.get_color_from_pallet(color_index, pallet);
     }
 
