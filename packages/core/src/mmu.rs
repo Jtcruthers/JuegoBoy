@@ -145,7 +145,7 @@ impl Memory for MMU {
             self.joypad.interrupt = false;
         }
 
-        self.apu.tick();
+        self.apu.tick(self.timer.div());
     }
 
     fn read_byte(&self, address: u16) -> u8 {

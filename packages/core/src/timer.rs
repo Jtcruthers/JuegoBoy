@@ -32,7 +32,7 @@ impl Timer {
         }
     }
 
-    fn div(&self) -> u8 {
+    pub fn div(&self) -> u8 {
         (self.system_counter >> 8) as u8
     }
 }

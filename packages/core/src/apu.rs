@@ -21,6 +21,9 @@ pub struct APU {
     nr43: u8,
     nr44: u8,
     wave_ram: [u8; 16],
+
+    div_apu: u32,
+    timer_div_last: u8,
 }
 
 impl APU {
@@ -48,10 +51,54 @@ impl APU {
             nr43: 0x00,
             nr44: 0x00,
             wave_ram: [0; 16],
+
+            div_apu: 0,
+            timer_div_last: 0,
         }
     }
 
-    pub fn tick(&mut self) {}
+    pub fn tick(&mut self, timer_div: u8) {
+        // increment div_apu when bit 4 of timer_div goes from 1 to 0
+        if self.timer_div_last & 0b0001_0000 == 1 && timer_div & 0b0001_0000 == 0 {
+            self.div_apu += 1;
+        }
+
+        if self.nr52 & 0b1000_0000 == 0 {
+            // APU is disabled, reset all registers but keep wave ram. Timer is uneffected
+            self.nr10 = 0x00;
+            self.nr11 = 0x00;
+            self.nr12 = 0x00;
+            self.nr13 = 0x00;
+            self.nr14 = 0x00;
+            self.nr21 = 0x00;
+            self.nr22 = 0x00;
+            self.nr23 = 0x00;
+            self.nr24 = 0x00;
+            self.nr30 = 0x00;
+            self.nr31 = 0x00;
+            self.nr32 = 0x00;
+            self.nr33 = 0x00;
+            self.nr34 = 0x00;
+            self.nr41 = 0x00;
+            self.nr42 = 0x00;
+            self.nr43 = 0x00;
+            self.nr44 = 0x00;
+
+            return;
+        }
+
+        if self.div_apu % 8 == 0 {
+            // envelope sweep
+        }
+
+        if self.div_apu % 2 == 0 {
+            // sound length
+        }
+
+        if self.div_apu % 4 == 0 {
+            // channel 1 sweep
+        }
+    }
 
     pub fn write_byte(&mut self, address: u16, value: u8) {
         match address {
