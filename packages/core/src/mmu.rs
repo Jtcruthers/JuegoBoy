@@ -65,7 +65,7 @@ impl MMU {
             0xFF02 => todo!("Serial"), //TODO - Serial
             0xFF04..=0xFF07 => self.timer.read_byte(address),
             0xFF0F => self.if_reg | !INTERRUPT_MASK, // Interrupt Flag
-            0xFF10..=0xFF3F => 0,                    //TODO - APU
+            0xFF10..=0xFF3F => self.apu.read_byte(address),
             0xFF40..=0xFF4B => self.ppu.read_byte(address),
             0xFF50 => self.boot_rom_reg,
             _ => 0xFF,
@@ -84,7 +84,7 @@ impl MMU {
             }
             0xFF04..=0xFF07 => self.timer.write_byte(address, value),
             0xFF0F => self.if_reg = value,
-            0xFF10..=0xFF3F => (), //TODO - APU
+            0xFF10..=0xFF3F => self.apu.write_byte(address, value),
             0xFF40..=0xFF4B => self.ppu.write_byte(address, value),
             0xFF50 => self.boot_rom_reg = value,
             _ => (),
