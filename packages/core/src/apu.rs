@@ -23,21 +23,10 @@
 
 /// Enum for the various channels in the APU, since they all have differences
 enum ChannelType {
-    One {
-        nr10: u8,
-        sweep_timer: u8,
-        envelope_timer: u8,
-    },
-    Two {
-        envelope_timer: u8,
-    },
-    Three {
-        nr30: u8,
-        volume: u8,
-    },
-    Four {
-        envelope_timer: u8,
-    },
+    One { sweep_timer: u8 },
+    Two,
+    Three,
+    Four,
 }
 
 /// enum for the various types of waveform generators.
@@ -55,6 +44,7 @@ enum WaveformGenerator {
 /// based on the type of channel. Since the waveform is the biggest difference, it's an Enum that I
 /// can match on
 struct Channel {
+    nrx0: u8,
     nrx1: u8,
     nrx2: u8,
     nrx3: u8,
@@ -71,6 +61,7 @@ struct Channel {
 impl Channel {
     fn new_ch1() -> Self {
         Channel {
+            nrx0: 0,
             nrx1: 0,
             nrx2: 0,
             nrx3: 0,
@@ -82,16 +73,13 @@ impl Channel {
 
             waveform_generator: WaveformGenerator::Pulse,
 
-            channel_type: ChannelType::One {
-                nr10: 0,
-                sweep_timer: 0,
-                envelope_timer: 0,
-            },
+            channel_type: ChannelType::One { sweep_timer: 0 },
         }
     }
 
     fn new_ch2() -> Self {
         Channel {
+            nrx0: 0,
             nrx1: 0,
             nrx2: 0,
             nrx3: 0,
@@ -103,12 +91,13 @@ impl Channel {
 
             waveform_generator: WaveformGenerator::Pulse,
 
-            channel_type: ChannelType::Two { envelope_timer: 0 },
+            channel_type: ChannelType::Two,
         }
     }
 
     fn new_ch3() -> Self {
         Channel {
+            nrx0: 0,
             nrx1: 0,
             nrx2: 0,
             nrx3: 0,
@@ -120,12 +109,13 @@ impl Channel {
 
             waveform_generator: WaveformGenerator::Wave,
 
-            channel_type: ChannelType::Three { nr30: 0, volume: 0 },
+            channel_type: ChannelType::Three,
         }
     }
 
     fn new_ch4() -> Self {
         Channel {
+            nrx0: 0,
             nrx1: 0,
             nrx2: 0,
             nrx3: 0,
@@ -137,7 +127,7 @@ impl Channel {
 
             waveform_generator: WaveformGenerator::LFSR,
 
-            channel_type: ChannelType::Four { envelope_timer: 0 },
+            channel_type: ChannelType::Four,
         }
     }
 
@@ -146,9 +136,8 @@ impl Channel {
     /// on the specific channel itself
     fn write_byte(&mut self, address_offset: u16, value: u8) {
         match address_offset {
-            0 => match &mut self.channel_type {
-                ChannelType::One { nr10, .. } => *nr10 = value,
-                ChannelType::Three { nr30, .. } => *nr30 = value,
+            0 => match self.channel_type {
+                ChannelType::One { .. } | ChannelType::Three => self.nrx0 = value,
                 _ => (),
             },
             1 => self.nrx1 = value,
@@ -166,20 +155,20 @@ impl Channel {
         // This is kinda complex with the masks. There is a better way
         match address_offset {
             0 => match self.channel_type {
-                ChannelType::One { nr10, .. } => nr10 | 0b1000_0000,
-                ChannelType::Three { nr30, .. } => nr30 | 0b0111_1111,
+                ChannelType::One { .. } => self.nrx0 | 0b1000_0000,
+                ChannelType::Three => self.nrx0 | 0b0111_1111,
                 _ => 0xFF, // Doesn't exist, so read 0xFF
             },
             1 => self.nrx1 | 0b0011_1111,
             2 => match self.channel_type {
-                ChannelType::Three { .. } => self.nrx2 | 0b1001_1111,
+                ChannelType::Three => self.nrx2 | 0b1001_1111,
                 _ => self.nrx2,
             },
             3 => match self.channel_type {
-                ChannelType::Four { .. } => self.nrx3,
+                ChannelType::Four => self.nrx3,
                 _ => 0xFF,
             },
-            4 => self.nrx4 | 0b1011_1111, // Bits 7 and 2-0 are write-only, and 5-3 are empty, so set them
+            4 => self.nrx4 | 0b1011_1111,
             _ => panic!("Invalid channel write address: {:X}", address_offset),
         }
     }
@@ -266,9 +255,9 @@ impl APU {
             0xFF25 => self.nr51 = value,
             0xFF24 => self.nr50 = value,
             0xFF10..=0xFF14 => self.channel1.write_byte(address - 0xFF10, value),
-            0xFF16..=0xFF19 => self.channel2.write_byte(address - 0xFF16, value),
+            0xFF15..=0xFF19 => self.channel2.write_byte(address - 0xFF15, value),
             0xFF1A..=0xFF1E => self.channel3.write_byte(address - 0xFF1A, value),
-            0xFF20..=0xFF23 => self.channel4.write_byte(address - 0xFF20, value),
+            0xFF1F..=0xFF23 => self.channel4.write_byte(address - 0xFF1F, value),
             0xFF30..=0xFF3F => self.wave_ram[(address - 0xFF30) as usize] = value,
             _ => panic!("Invalid APU write address: {:X}", address),
         }
@@ -299,27 +288,16 @@ mod tests {
     fn test_read_nr10() {
         let mut apu = APU::new();
 
-        match &mut apu.channel1.channel_type {
-            ChannelType::One { nr10, .. } => *nr10 = 0,
-            _ => assert!(false, "Channel 1 is not of type One"),
-        }
+        apu.channel1.nrx0 = 0;
         assert_eq!(apu.read_byte(0xFF10), 0b1000_0000);
 
-        match &mut apu.channel1.channel_type {
-            ChannelType::One { nr10, .. } => *nr10 = 0xFF,
-            _ => assert!(false, "Channel 1 is not of type One"),
-        }
+        apu.channel1.nrx0 = 0xFF;
         assert_eq!(apu.read_byte(0xFF10), 0xFF);
     }
 
     #[test]
     fn test_read_nr11() {
         let mut apu = APU::new();
-
-        match &mut apu.channel1.channel_type {
-            ChannelType::One { nr10, .. } => *nr10 = 0xFF,
-            _ => assert!(false, "Channel 1 is not of type One"),
-        }
 
         apu.channel1.nrx1 = 0;
         assert_eq!(apu.read_byte(0xFF11), 0b0011_1111);
@@ -409,16 +387,10 @@ mod tests {
     fn test_read_nr30() {
         let mut apu = APU::new();
 
-        match &mut apu.channel3.channel_type {
-            ChannelType::Three { nr30, .. } => *nr30 = 0,
-            _ => assert!(false, "Channel 3 is not of type Three"),
-        }
+        apu.channel3.nrx0 = 0;
         assert_eq!(apu.read_byte(0xFF1A), 0b0111_1111);
 
-        match &mut apu.channel3.channel_type {
-            ChannelType::Three { nr30, .. } => *nr30 = 0xFF,
-            _ => assert!(false, "Channel 3 is not of type Three"),
-        }
+        apu.channel3.nrx0 = 0xFF;
         assert_eq!(apu.read_byte(0xFF1A), 0xFF);
     }
 
