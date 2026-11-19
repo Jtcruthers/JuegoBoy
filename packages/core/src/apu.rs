@@ -54,7 +54,6 @@ struct Channel {
     length_timer: u8,
     envelope_timer: u8,
 
-    waveform_generator: WaveformGenerator,
     channel_type: ChannelType,
 }
 
@@ -70,8 +69,6 @@ impl Channel {
             period_counter: 0,
             length_timer: 0,
             envelope_timer: 0,
-
-            waveform_generator: WaveformGenerator::Pulse,
 
             channel_type: ChannelType::One { sweep_timer: 0 },
         }
@@ -89,8 +86,6 @@ impl Channel {
             length_timer: 0,
             envelope_timer: 0,
 
-            waveform_generator: WaveformGenerator::Pulse,
-
             channel_type: ChannelType::Two,
         }
     }
@@ -106,8 +101,6 @@ impl Channel {
             period_counter: 0,
             length_timer: 0,
             envelope_timer: 0,
-
-            waveform_generator: WaveformGenerator::Wave,
 
             channel_type: ChannelType::Three,
         }
@@ -125,9 +118,15 @@ impl Channel {
             length_timer: 0,
             envelope_timer: 0,
 
-            waveform_generator: WaveformGenerator::LFSR,
-
             channel_type: ChannelType::Four,
+        }
+    }
+
+    fn get_generator(&self) -> WaveformGenerator {
+        match self.channel_type {
+            ChannelType::One { .. } | ChannelType::Two => WaveformGenerator::Pulse,
+            ChannelType::Three => WaveformGenerator::Wave,
+            ChannelType::Four => WaveformGenerator::LFSR,
         }
     }
 
