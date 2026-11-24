@@ -8,6 +8,10 @@ I'm working on getting it M-cycle accurate on timing, but it does use scanline-b
 
 ## Running
 
+It uses the copywright-free bootix_dmg Bootrom, so none is required.
+
+### Native
+
 To build it,
 
 `cargo build --release -p gui`
@@ -16,7 +20,19 @@ To run:
 
 `./target/release/gui <path/to/rom>`
 
-It uses the copywright-free bootix_dmg Bootrom, so none is required.
+### Web
+
+To build,
+
+`wasm-pack build packages/web --target web --release --out-dir www/pkg --no-typescript`
+
+To run:
+
+You can serve the generated web package wherever, or run a test server via
+
+`python3 -m http.server 8080 --directory packages/web/www`
+
+The web site will have to provide it a file, but it will handle the timing and input/output separately as long as a canvas is provided
 
 ## General
 
