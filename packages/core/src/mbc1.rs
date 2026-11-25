@@ -1,4 +1,4 @@
-use crate::cartridge::{HEADER_RAM_SIZE_32K, HEADER_RAM_SIZE_ADDRESS, MBC};
+use crate::cartridge::{HEADER_RAM_SIZE_32K, HEADER_RAM_SIZE_8K, HEADER_RAM_SIZE_ADDRESS, MBC};
 
 pub struct MBC1 {
     /// 1-bit register, write only to 0x0000-1FFF
@@ -18,23 +18,28 @@ pub struct MBC1 {
     /// 0 uses the ram_bank to determine which bank to use for both ROM bank 0 and RAM bank 0.
     banking_mode: u8,
 
+    /// External RAM, sized from the RAM size in the header. It will either be empty, 8K, or 32K in
+    /// the form of 4 8K banks. To use the 32 KiB ram, the ROM must be <= 512 KiB.
+    ram: Vec<u8>,
+
     rom: Vec<u8>,
-    /// External RAM. It will either be 8K or 32K in the form of 4 8K banks. To use the 32 KiB ram,
-    /// the ROM must be <= 512 KiB. Currently, i'm just setting it to the max size, but I should
-    /// check the size of the ROM and dynamically set this.
-    /// TODO - set this based on the actual size of the ROM
-    ram: [u8; 0x8000],
 }
 
 impl MBC1 {
     pub fn new(rom: Vec<u8>) -> Self {
+        let ram_size = match rom[HEADER_RAM_SIZE_ADDRESS] {
+            HEADER_RAM_SIZE_8K => 0x2000,
+            HEADER_RAM_SIZE_32K => 0x8000,
+            _ => 0,
+        };
+
         MBC1 {
             rom_bank: 0,
             ram_bank: 0,
             ram_enabled: false,
             banking_mode: 0,
             rom: rom,
-            ram: [0; 0x8000],
+            ram: vec![0; ram_size],
         }
     }
 
@@ -61,7 +66,8 @@ impl MBC for MBC1 {
                 self.banking_mode = value & 0b1;
             }
             0xA000..=0xBFFF => {
-                if !self.ram_enabled {
+                // Carts without RAM ignore writes
+                if !self.ram_enabled || self.ram.is_empty() {
                     return;
                 }
                 let bank = if self.banking_mode == 0 {
@@ -106,7 +112,7 @@ impl MBC for MBC1 {
                 self.rom[(address as usize - 0x4000) + bank_number * 0x4000]
             }
             0xA000..=0xBFFF => {
-                if !self.ram_enabled {
+                if !self.ram_enabled || self.ram.is_empty() {
                     return 0xFF;
                 }
                 let bank = if self.banking_mode == 0 {
@@ -148,7 +154,7 @@ mod tests {
 
     #[test]
     fn test_setting_ram_enable() {
-        let mut mbc1 = MBC1::new(vec![0; 0x1]);
+        let mut mbc1 = MBC1::new(vec![0; 0x8000]);
         mbc1.ram_enabled = false;
         mbc1.write_byte(0x0000, 0xA);
         assert_eq!(mbc1.ram_enabled, true);
@@ -158,7 +164,7 @@ mod tests {
 
     #[test]
     fn test_setting_rom_bank() {
-        let mut mbc1 = MBC1::new(vec![0; 0x1]);
+        let mut mbc1 = MBC1::new(vec![0; 0x8000]);
         mbc1.rom_bank = 0;
         mbc1.write_byte(0x2000, 10);
         assert_eq!(mbc1.rom_bank, 10);
@@ -168,7 +174,7 @@ mod tests {
 
     #[test]
     fn test_setting_ram_bank() {
-        let mut mbc1 = MBC1::new(vec![0; 0x1]);
+        let mut mbc1 = MBC1::new(vec![0; 0x8000]);
         mbc1.ram_bank = 0;
         mbc1.write_byte(0x4000, 3);
         assert_eq!(mbc1.ram_bank, 3);
@@ -178,7 +184,7 @@ mod tests {
 
     #[test]
     fn test_setting_banking_mode() {
-        let mut mbc1 = MBC1::new(vec![0; 0x1]);
+        let mut mbc1 = MBC1::new(vec![0; 0x8000]);
         mbc1.banking_mode = 0;
         mbc1.write_byte(0x6000, 1);
         assert_eq!(mbc1.banking_mode, 1);
@@ -304,5 +310,26 @@ mod tests {
         mbc1.write_byte(0xBFFF, 0x33);
         assert_eq!(mbc1.ram[2 * 0x2000 + 0x1FFF], 0x33);
         assert_eq!(mbc1.read_byte(0xBFFF), 0x33);
+    }
+
+    #[test]
+    fn test_ram_sized_from_header() {
+        let mut rom = vec![0; 0x8000];
+        assert_eq!(MBC1::new(rom.clone()).ram.len(), 0);
+
+        rom[HEADER_RAM_SIZE_ADDRESS] = HEADER_RAM_SIZE_8K;
+        assert_eq!(MBC1::new(rom.clone()).ram.len(), 0x2000);
+
+        rom[HEADER_RAM_SIZE_ADDRESS] = HEADER_RAM_SIZE_32K;
+        assert_eq!(MBC1::new(rom).ram.len(), 0x8000);
+    }
+
+    #[test]
+    fn test_no_ram_reads_ff_and_ignores_writes() {
+        let mut mbc1 = MBC1::new(vec![0; 0x8000]);
+
+        mbc1.write_byte(0x0000, 0x0A);
+        mbc1.write_byte(0xA000, 0x11);
+        assert_eq!(mbc1.read_byte(0xA000), 0xFF);
     }
 }

@@ -1,6 +1,7 @@
 use crate::mbc1::MBC1;
 
 pub const HEADER_RAM_SIZE_ADDRESS: usize = 0x0149;
+pub const HEADER_RAM_SIZE_8K: u8 = 0x02;
 pub const HEADER_RAM_SIZE_32K: u8 = 0x03;
 
 pub trait MBC {
