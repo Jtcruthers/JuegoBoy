@@ -60,6 +60,22 @@ impl MBC for MBC1 {
             0x6000..=0x7FFF => {
                 self.banking_mode = value & 0b1;
             }
+            0xA000..=0xBFFF => {
+                if !self.ram_enabled {
+                    return;
+                }
+                let bank = if self.banking_mode == 0 {
+                    0
+                } else {
+                    let mask = if self.rom[HEADER_RAM_SIZE_ADDRESS] == HEADER_RAM_SIZE_32K {
+                        0b11
+                    } else {
+                        0b00
+                    };
+                    self.ram_bank as usize & mask
+                };
+                self.ram[bank * 0x2000 + (address - 0xA000) as usize] = value;
+            }
             _ => panic!("Invalid address for writes"),
         }
     }
@@ -251,5 +267,42 @@ mod tests {
         mbc1.write_byte(0x2000, 1);
         mbc1.write_byte(0x4000, 0b11);
         assert_eq!(mbc1.read_byte(0x4000), 0x21);
+    }
+
+    #[test]
+    fn test_write_ram_ignored_when_disabled() {
+        let mut rom = vec![0; 0x8000];
+        rom[HEADER_RAM_SIZE_ADDRESS] = HEADER_RAM_SIZE_32K;
+        let mut mbc1 = MBC1::new(rom);
+
+        mbc1.write_byte(0xA000, 0x11);
+        mbc1.write_byte(0x0000, 0x0A);
+        assert_eq!(mbc1.read_byte(0xA000), 0x00);
+    }
+
+    #[test]
+    fn test_write_ram_mode_0_is_always_bank_0() {
+        let mut rom = vec![0; 0x8000];
+        rom[HEADER_RAM_SIZE_ADDRESS] = HEADER_RAM_SIZE_32K;
+        let mut mbc1 = MBC1::new(rom);
+
+        mbc1.write_byte(0x0000, 0x0A);
+        mbc1.write_byte(0x4000, 2);
+        mbc1.write_byte(0xA123, 0x22);
+        assert_eq!(mbc1.ram[0x0123], 0x22);
+    }
+
+    #[test]
+    fn test_write_ram_mode_1_uses_selected_bank() {
+        let mut rom = vec![0; 0x8000];
+        rom[HEADER_RAM_SIZE_ADDRESS] = HEADER_RAM_SIZE_32K;
+        let mut mbc1 = MBC1::new(rom);
+
+        mbc1.write_byte(0x0000, 0x0A);
+        mbc1.write_byte(0x4000, 2);
+        mbc1.write_byte(0x6000, 1);
+        mbc1.write_byte(0xBFFF, 0x33);
+        assert_eq!(mbc1.ram[2 * 0x2000 + 0x1FFF], 0x33);
+        assert_eq!(mbc1.read_byte(0xBFFF), 0x33);
     }
 }
