@@ -65,15 +65,16 @@ impl Gameboy {
 
     /// Restore cartridge RAM from a .sav file. Call this before running any frames, since the game
     /// reads its save during startup.
-    pub fn load_cartridge_ram(&mut self, data: &[u8]) {
+    pub fn load_cartridge_ram(&mut self, data: &[u8]) -> Result<(), String> {
         let ram = self.mmu.cartridge.mbc.ram_mut();
         if data.len() != ram.len() {
-            panic!(
+            return Err(format!(
                 "save is {} bytes but the cartridge has {} bytes of RAM",
                 data.len(),
                 ram.len()
-            );
+            ));
         }
         ram.copy_from_slice(data);
+        Ok(())
     }
 }

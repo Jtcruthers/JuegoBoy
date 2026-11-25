@@ -5,6 +5,7 @@ export { Button };
 const WIDTH = 160;
 const HEIGHT = 144;
 const MS_PER_FRAME = (70224 / 4194304) * 1000; // ≈ 59.73 fps
+const SAVE_INTERVAL_MS = 5000;
 
 /** KeyboardEvent.code → button. Same layout as the native frontend. */
 const KEYS = {
@@ -35,6 +36,7 @@ export async function mount(canvas, { romInput, keyTarget = canvas } = {}) {
 
   const ctx = canvas.getContext("2d");
   let emulator = null;
+  let saveKey = null;
   let paused = false;
   let lastTime = 0;
   let behind = 0;
@@ -42,6 +44,19 @@ export async function mount(canvas, { romInput, keyTarget = canvas } = {}) {
   function draw() {
     const pixels = new Uint8ClampedArray(emulator.frame());
     ctx.putImageData(new ImageData(pixels, WIDTH, HEIGHT), 0, 0);
+  }
+
+  // Persist cartridge RAM to localStorage. Wrapped in try/catch since storage can be
+  // unavailable (private browsing) or full; the emulator should keep running either way.
+  function save() {
+    if (!emulator || !saveKey) return;
+    const ram = emulator.get_cartridge_ram();
+    if (ram.length === 0) return;
+    try {
+      localStorage.setItem(saveKey, btoa(String.fromCharCode(...ram)));
+    } catch (err) {
+      console.warn("Couldn't write save", err);
+    }
   }
 
   function releaseAll() {
@@ -76,8 +91,15 @@ export async function mount(canvas, { romInput, keyTarget = canvas } = {}) {
 
   keyTarget.addEventListener("keydown", onKey);
   keyTarget.addEventListener("keyup", onKey);
-  keyTarget.addEventListener("blur", releaseAll); // dont leave buttons stuck down
+  keyTarget.addEventListener("blur", releaseAll);
   window.addEventListener("blur", releaseAll);
+
+  // Save periodically and whenever the page is hidden or closed
+  setInterval(save, SAVE_INTERVAL_MS);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") save();
+  });
+  window.addEventListener("pagehide", save);
 
   romInput?.addEventListener("change", async () => {
     const file = romInput.files[0];
@@ -90,8 +112,27 @@ export async function mount(canvas, { romInput, keyTarget = canvas } = {}) {
   const gb = {
     /** Start a ROM from an ArrayBuffer, replacing any running one. */
     loadRom(bytes) {
+      save(); // flush the outgoing game before replacing it
       emulator?.free();
-      emulator = new Emulator(new Uint8Array(bytes));
+
+      const rom = new Uint8Array(bytes);
+      emulator = new Emulator(rom);
+
+      // Key saves by the header title (0x134-0x143) plus global checksum (0x14E-0x14F)
+      // so different games, and different revisions of the same game, don't collide.
+      const title = String.fromCharCode(...rom.subarray(0x134, 0x144)).replace(/\0+$/, "");
+      const checksum = ((rom[0x14e] << 8) | rom[0x14f]).toString(16).padStart(4, "0");
+      saveKey = `juegoboy:sav:${title}:${checksum}`;
+
+      try {
+        const stored = localStorage.getItem(saveKey);
+        if (stored) {
+          emulator.load_cartridge_ram(Uint8Array.from(atob(stored), (c) => c.charCodeAt(0)));
+        }
+      } catch (err) {
+        console.warn("Couldn't load save", err);
+      }
+
       lastTime = performance.now();
       behind = 0;
     },

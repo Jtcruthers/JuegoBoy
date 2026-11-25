@@ -73,6 +73,18 @@ impl Emulator {
         rgba
     }
 
+    /// The cartridge RAM (the game's save data). Empty if the cartridge has no RAM.
+    pub fn get_cartridge_ram(&self) -> Vec<u8> {
+        self.gameboy.get_cartridge_ram().to_vec()
+    }
+
+    /// Restore cartridge RAM from a previous `cartridge_ram()`. Throws if the size doesn't match.
+    pub fn load_cartridge_ram(&mut self, data: &[u8]) -> Result<(), JsError> {
+        self.gameboy
+            .load_cartridge_ram(data)
+            .map_err(|err| JsError::new(&err))
+    }
+
     pub fn press_button(&mut self, button: Button) {
         self.gameboy.press_button(button.into());
     }
