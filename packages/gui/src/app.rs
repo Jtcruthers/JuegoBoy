@@ -1,4 +1,6 @@
+use std::fs;
 use std::num::NonZeroU32;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
@@ -21,6 +23,7 @@ const SECONDS_PER_FRAME: f64 = CYCLES_PER_FRAME as f64 / DOT as f64;
 
 pub struct App {
     gameboy: Gameboy,
+    save_path: PathBuf,
     context: Context<OwnedDisplayHandle>,
     state: AppState,
     frame_count: usize,
@@ -39,10 +42,19 @@ enum AppState {
 }
 
 impl App {
-    pub fn new(rom: Vec<u8>, context: Context<OwnedDisplayHandle>) -> Self {
-        let gameboy = Gameboy::new(rom);
+    pub fn new(rom: Vec<u8>, save_path: PathBuf, context: Context<OwnedDisplayHandle>) -> Self {
+        let mut gameboy = Gameboy::new(rom);
+
+        if let Ok(save) = fs::read(&save_path) {
+            match gameboy.load_cartridge_ram(&save) {
+                Ok(()) => log::info!("Loaded save from {}", save_path.display()),
+                Err(err) => log::warn!("Ignoring {}: {}", save_path.display(), err),
+            }
+        }
+
         Self {
             gameboy: gameboy,
+            save_path: save_path,
             context: context,
             state: AppState::Initial,
             frame_count: 0,
@@ -135,6 +147,15 @@ impl ApplicationHandler for App {
             }
             WindowEvent::CloseRequested => {
                 println!("The close button was pressed; stopping");
+                let ram = self.gameboy.get_cartridge_ram();
+                if !ram.is_empty() {
+                    match fs::write(&self.save_path, ram) {
+                        Ok(()) => log::info!("Saved to {}", self.save_path.display()),
+                        Err(err) => {
+                            log::error!("Failed to write {}: {}", self.save_path.display(), err)
+                        }
+                    }
+                }
                 event_loop.exit();
             }
             WindowEvent::KeyboardInput { event, .. } => {

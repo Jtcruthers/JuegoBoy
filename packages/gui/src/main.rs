@@ -1,6 +1,6 @@
 use clap::Parser;
 use env_logger;
-use std::{fs, time::Instant};
+use std::{fs, path::Path, time::Instant};
 
 use softbuffer::Context;
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -27,6 +27,7 @@ fn main() {
 
     let args = Args::parse();
     let rom = fs::read(&args.rom_name).expect("Cant read the rom");
+    let save_path = Path::new(&args.rom_name).with_extension("sav");
 
     let event_loop = EventLoop::new().unwrap();
 
@@ -34,7 +35,7 @@ fn main() {
 
     let context = Context::new(event_loop.owned_display_handle()).unwrap();
 
-    let mut app = app::App::new(rom, context);
+    let mut app = app::App::new(rom, save_path, context);
     match event_loop.run_app(&mut app) {
         Ok(ok) => {
             log::info!("Application exited successfully: {:?}", ok);
