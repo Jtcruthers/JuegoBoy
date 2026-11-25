@@ -1,4 +1,4 @@
-use crate::cartridge::MBC;
+use crate::cartridge::{HEADER_RAM_SIZE_32K, HEADER_RAM_SIZE_ADDRESS, MBC};
 
 pub struct MBC1 {
     /// 1-bit register, write only to 0x0000-1FFF
@@ -37,6 +37,12 @@ impl MBC1 {
             ram: [0; 0x8000],
         }
     }
+
+    /// Returns the mask applied to the ROM bank number. Bank lines beyond the ROM size aren't
+    /// wired up on the cart, so just wrap instead of overflowing
+    fn get_rom_bank_mask(&self) -> usize {
+        self.rom.len().div_ceil(0x4000).next_power_of_two() - 1
+    }
 }
 
 impl MBC for MBC1 {
@@ -67,22 +73,21 @@ impl MBC for MBC1 {
                 let bank_number = if self.banking_mode == 0 {
                     0
                 } else {
-                    self.ram_bank << 5 // Move these bits to 6/5
+                    (self.ram_bank as usize) << 5 // Move these bits to 6/5
                 };
-                self.rom[address as usize + bank_number as usize * 0x4000]
+                let bank_number = bank_number & self.get_rom_bank_mask();
+                self.rom[address as usize + bank_number * 0x4000]
             }
             0x4000..=0x7FFF => {
                 // This area contains the other 16 KiB banks of the ROM. If the main 5-bit ROM
-                // banking register is 0, it reads the bank as if it was set to 1.
-                let low_bank = if self.rom_bank == 0 {
-                    0
-                } else {
-                    self.rom_bank - 1
-                };
-                let high_bank = self.ram_bank << 5;
-                let bank_number = ((high_bank | low_bank) & 0b111_1111) as usize;
+                // banking register is 0, it reads the bank as if it was set to 1. The 0 -> 1
+                // check happens before masking, so on small ROMs an oversized bank number can
+                // still wrap to bank 0.
+                let low_bank = if self.rom_bank == 0 { 1 } else { self.rom_bank } as usize;
+                let high_bank = (self.ram_bank as usize) << 5;
+                let bank_number = (high_bank | low_bank) & self.get_rom_bank_mask();
 
-                self.rom[address as usize + bank_number * 0x4000]
+                self.rom[(address as usize - 0x4000) + bank_number * 0x4000]
             }
             0xA000..=0xBFFF => {
                 if !self.ram_enabled {
@@ -91,8 +96,13 @@ impl MBC for MBC1 {
                 let bank = if self.banking_mode == 0 {
                     0
                 } else {
-                    self.ram_bank
-                } as usize;
+                    let mask = if self.rom[HEADER_RAM_SIZE_ADDRESS] == HEADER_RAM_SIZE_32K {
+                        0b11
+                    } else {
+                        0b00
+                    };
+                    self.ram_bank as usize & mask
+                };
                 self.ram[bank * 0x2000 + (address - 0xA000) as usize]
             }
             _ => 0xFF, // just return 0xFF if it doesn't isn't supported
@@ -182,7 +192,9 @@ mod tests {
 
     #[test]
     fn test_read_ram_bank_nn() {
-        let mut mbc1 = MBC1::new(vec![0; 0x1]);
+        let mut rom = vec![0; 0x8000];
+        rom[HEADER_RAM_SIZE_ADDRESS] = HEADER_RAM_SIZE_32K; // 32 KiB RAM
+        let mut mbc1 = MBC1::new(rom);
         mbc1.ram_enabled = true;
         mbc1.banking_mode = 1;
         mbc1.ram[0] = 0xAA;
@@ -201,5 +213,43 @@ mod tests {
 
         mbc1.ram_bank = 3;
         assert_eq!(mbc1.read_byte(0xA000), 0xDD);
+    }
+
+    #[test]
+    fn test_rom_bank_wraps_on_small_rom() {
+        // 256 KiB ROM = 16 banks, mask 0x0F
+        let mut rom = vec![0; 0x40000];
+        rom[0] = 0x00;
+        rom[0x4000] = 0x01;
+        rom[0x3 * 0x4000] = 0x03;
+        let mut mbc1 = MBC1::new(rom);
+
+        // 0x13 wraps to bank 3
+        mbc1.write_byte(0x2000, 0x13);
+        assert_eq!(mbc1.read_byte(0x4000), 0x03);
+
+        // 0x10 is not 0, so no 0 -> 1 fixup, and it wraps to bank 0
+        mbc1.write_byte(0x2000, 0x10);
+        assert_eq!(mbc1.read_byte(0x4000), 0x00);
+
+        // Upper bits are ignored entirely on a small ROM
+        mbc1.write_byte(0x2000, 0x01);
+        mbc1.write_byte(0x4000, 0b11);
+        assert_eq!(mbc1.read_byte(0x4000), 0x01);
+        mbc1.write_byte(0x6000, 1);
+        assert_eq!(mbc1.read_byte(0x0000), 0x00);
+    }
+
+    #[test]
+    fn test_rom_bank_wraps_on_1mib_rom() {
+        // 1 MiB ROM = 64 banks, so only bit 5 of the upper bits is used
+        let mut rom = vec![0; 0x100000];
+        rom[0x21 * 0x4000] = 0x21;
+        let mut mbc1 = MBC1::new(rom);
+
+        // 0b11 << 5 | 1 = 0x61, wraps to 0x21
+        mbc1.write_byte(0x2000, 1);
+        mbc1.write_byte(0x4000, 0b11);
+        assert_eq!(mbc1.read_byte(0x4000), 0x21);
     }
 }
