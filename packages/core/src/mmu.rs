@@ -150,16 +150,15 @@ impl Memory for MMU {
 
     fn read_byte(&self, address: u16) -> u8 {
         let byte = match address {
-            0x0000..=0x3FFF => {
+            0x0000..=0x7FFF => {
                 if self.boot_rom_reg == 0 && address < 0x100 {
                     BOOT_ROM[address as usize]
                 } else {
-                    self.cartridge.read_bank_0(address)
+                    self.cartridge.read_byte(address)
                 }
             }
-            0x4000..=0x7FFF => self.cartridge.read_bank_n(address),
             0x8000..=0x9FFF => self.ppu.read_byte(address),
-            0xA000..=0xBFFF => self.cartridge.read_ram(address),
+            0xA000..=0xBFFF => self.cartridge.read_byte(address),
             0xC000..=0xDFFF => self.wram[(address - 0xC000) as usize],
             0xE000..=0xFDFF => self.wram[(address - 0xE000) as usize], // echo RAM
             0xFE00..=0xFE9F => self.ppu.read_byte(address),
@@ -175,10 +174,9 @@ impl Memory for MMU {
     fn write_byte(&mut self, address: u16, value: u8) {
         trace!("Writing to {:04X} = {:02X}", address, value);
         match address {
-            0x0000..=0x3FFF => self.cartridge.write_bank_0(address, value),
-            0x4000..=0x7FFF => self.cartridge.write_bank_n(address, value),
+            0x0000..=0x7FFF => self.cartridge.write_byte(address, value),
             0x8000..=0x9FFF => self.ppu.write_byte(address, value),
-            0xA000..=0xBFFF => self.cartridge.write_ram(address, value),
+            0xA000..=0xBFFF => self.cartridge.write_byte(address, value),
             0xC000..=0xDFFF => self.wram[(address - 0xC000) as usize] = value,
             0xE000..=0xFDFF => self.wram[(address - 0xE000) as usize] = value, // echo ram
             0xFE00..=0xFE9F => self.ppu.write_byte(address, value),
