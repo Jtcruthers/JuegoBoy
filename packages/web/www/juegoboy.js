@@ -24,9 +24,10 @@ const KEYS = {
  *
  * Options:
  *   romInput  – <input type="file"> to load ROMs from
+ *   saveInput – <input type="file"> to import .sav files from
  *   keyTarget – where to listen for keys (default: the canvas; pass `window` for page-wide)
  */
-export async function mount(canvas, { romInput, keyTarget = canvas } = {}) {
+export async function mount(canvas, { romInput, saveInput, keyTarget = canvas } = {}) {
   await init();
 
   canvas.width = WIDTH;
@@ -36,6 +37,8 @@ export async function mount(canvas, { romInput, keyTarget = canvas } = {}) {
 
   const ctx = canvas.getContext("2d");
   let emulator = null;
+  let rom = null;
+  let title = "";
   let saveKey = null;
   let paused = false;
   let lastTime = 0;
@@ -109,18 +112,31 @@ export async function mount(canvas, { romInput, keyTarget = canvas } = {}) {
     if (keyTarget === canvas) canvas.focus();
   });
 
+  saveInput?.addEventListener("change", async () => {
+    const file = saveInput.files[0];
+    saveInput.value = ""; // allow picking the same file again
+    if (!file) return;
+    try {
+      gb.importSave(await file.arrayBuffer());
+      saveInput.dispatchEvent(new CustomEvent("saveimported"));
+    } catch (err) {
+      saveInput.dispatchEvent(new CustomEvent("saveerror", { detail: err }));
+    }
+    if (keyTarget === canvas) canvas.focus();
+  });
+
   const gb = {
     /** Start a ROM from an ArrayBuffer, replacing any running one. */
     loadRom(bytes) {
       save(); // flush the outgoing game before replacing it
       emulator?.free();
 
-      const rom = new Uint8Array(bytes);
+      rom = new Uint8Array(bytes);
       emulator = new Emulator(rom);
 
       // Key saves by the header title (0x134-0x143) plus global checksum (0x14E-0x14F)
       // so different games, and different revisions of the same game, don't collide.
-      const title = String.fromCharCode(...rom.subarray(0x134, 0x144)).replace(/\0+$/, "");
+      title = String.fromCharCode(...rom.subarray(0x134, 0x144)).replace(/\0+$/, "");
       const checksum = ((rom[0x14e] << 8) | rom[0x14f]).toString(16).padStart(4, "0");
       saveKey = `juegoboy:sav:${title}:${checksum}`;
 
@@ -135,6 +151,48 @@ export async function mount(canvas, { romInput, keyTarget = canvas } = {}) {
 
       lastTime = performance.now();
       behind = 0;
+    },
+
+    /**
+     * Download the current game's save as a .sav file. Returns false if no ROM is loaded or
+     * the game has no save RAM.
+     */
+    downloadSave() {
+      const ram = emulator?.get_cartridge_ram();
+      if (!ram || ram.length === 0) return false;
+
+      const name = (title.replace(/[^A-Za-z0-9 _-]/g, "_").trim() || "save") + ".sav";
+      const url = URL.createObjectURL(new Blob([ram], { type: "application/octet-stream" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = name;
+      link.click();
+      // Mobile Safari reads the blob asynchronously, so don't revoke it straight away
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      return true;
+    },
+
+    /**
+     * Replace the current game's save with a .sav file's bytes and restart the game so it
+     * reads it, since games only load their save at boot. Throws (leaving the running game
+     * untouched) if no ROM is loaded or the file is the wrong size for this cartridge.
+     */
+    importSave(bytes) {
+      if (!rom) throw new Error("Load a ROM first");
+
+      const next = new Emulator(rom);
+      try {
+        next.load_cartridge_ram(new Uint8Array(bytes));
+      } catch (err) {
+        next.free();
+        throw err;
+      }
+
+      emulator.free();
+      emulator = next;
+      lastTime = performance.now();
+      behind = 0;
+      save();
     },
 
     /** Hold a button down (e.g. from an on-screen control). No-op before a ROM is loaded. */
