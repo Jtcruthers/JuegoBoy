@@ -33,7 +33,7 @@ impl MBC for MBC1 {
             _ => self.rom_bank - 1,
         } as u16;
 
-        self.rom[(address + multiplier * 0x4000) as usize]
+        self.rom[address as usize + multiplier as usize * 0x4000]
     }
 
     fn read_ram(&self, address: u16) -> u8 {
