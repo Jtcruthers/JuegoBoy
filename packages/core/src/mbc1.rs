@@ -130,6 +130,14 @@ impl MBC for MBC1 {
             _ => 0xFF, // just return 0xFF if it doesn't isn't supported
         }
     }
+
+    fn read_ram(&self) -> &[u8] {
+        &self.ram
+    }
+
+    fn ram_mut(&mut self) -> &mut [u8] {
+        &mut self.ram
+    }
 }
 
 #[cfg(test)]

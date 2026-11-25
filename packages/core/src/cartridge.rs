@@ -7,10 +7,12 @@ pub const HEADER_RAM_SIZE_32K: u8 = 0x03;
 pub trait MBC {
     fn read_byte(&self, address: u16) -> u8;
     fn write_byte(&mut self, address: u16, value: u8);
+    fn read_ram(&self) -> &[u8];
+    fn ram_mut(&mut self) -> &mut [u8];
 }
 
 pub struct Cartridge {
-    mbc: Box<dyn MBC>,
+    pub mbc: Box<dyn MBC>,
 }
 
 impl Cartridge {
@@ -28,5 +30,9 @@ impl Cartridge {
 
     pub fn write_byte(&mut self, address: u16, value: u8) {
         self.mbc.write_byte(address, value);
+    }
+
+    pub fn read_ram(&self) -> &[u8] {
+        self.mbc.read_ram()
     }
 }

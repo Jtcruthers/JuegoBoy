@@ -56,4 +56,24 @@ impl Gameboy {
     pub fn get_frame(&mut self) -> [u8; 160 * 144] {
         self.mmu.ppu.get_frame()
     }
+
+    /// The cartridge's external RAM, which is what games write their saves to. Persist this as a
+    /// .sav file. Empty if the cartridge has no RAM.
+    pub fn get_cartridge_ram(&self) -> &[u8] {
+        self.mmu.cartridge.read_ram()
+    }
+
+    /// Restore cartridge RAM from a .sav file. Call this before running any frames, since the game
+    /// reads its save during startup.
+    pub fn load_cartridge_ram(&mut self, data: &[u8]) {
+        let ram = self.mmu.cartridge.mbc.ram_mut();
+        if data.len() != ram.len() {
+            panic!(
+                "save is {} bytes but the cartridge has {} bytes of RAM",
+                data.len(),
+                ram.len()
+            );
+        }
+        ram.copy_from_slice(data);
+    }
 }
