@@ -40,6 +40,9 @@ export async function mount(canvas, { romInput, saveInput, keyTarget = canvas } 
   let rom = null;
   let title = "";
   let saveKey = null;
+  // What this tab last read from or wrote to storage. Only write when the RAM differs from it,
+  // so an idle tab can't overwrite a newer save made in another tab.
+  let lastSaved = null;
   let paused = false;
   let lastTime = 0;
   let behind = 0;
@@ -55,8 +58,11 @@ export async function mount(canvas, { romInput, saveInput, keyTarget = canvas } 
     if (!emulator || !saveKey) return;
     const ram = emulator.get_cartridge_ram();
     if (ram.length === 0) return;
+    const encoded = btoa(String.fromCharCode(...ram));
+    if (encoded === lastSaved) return;
     try {
-      localStorage.setItem(saveKey, btoa(String.fromCharCode(...ram)));
+      localStorage.setItem(saveKey, encoded);
+      lastSaved = encoded;
     } catch (err) {
       console.warn("Couldn't write save", err);
     }
@@ -148,6 +154,8 @@ export async function mount(canvas, { romInput, saveInput, keyTarget = canvas } 
       } catch (err) {
         console.warn("Couldn't load save", err);
       }
+      // Baseline is the RAM as loaded (or blank), so nothing is written until the game saves
+      lastSaved = btoa(String.fromCharCode(...emulator.get_cartridge_ram()));
 
       lastTime = performance.now();
       behind = 0;
