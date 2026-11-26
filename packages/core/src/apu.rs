@@ -25,7 +25,7 @@
 enum ChannelType {
     One { sweep_timer: u8 },
     Two,
-    Three,
+    Three { wave_index: u8 },
     Four,
 }
 
@@ -117,7 +117,7 @@ impl Channel {
             length_timer: 0,
             envelope_timer: 0,
 
-            channel_type: ChannelType::Three,
+            channel_type: ChannelType::Three { wave_index: 0 },
         }
     }
 
@@ -153,7 +153,7 @@ impl Channel {
 
         if self.length_timer == 0 {
             let length_mask = match self.channel_type {
-                ChannelType::Three => 0xFF, // Only channel3 uses the entire register for length
+                ChannelType::Three { .. } => 0xFF, // Only channel3 uses the entire register for length
                 _ => 0b0011_1111,
             };
             self.length_timer = self.nrx1 & length_mask;
@@ -172,7 +172,7 @@ impl Channel {
 
         // Reset envelope
         match self.channel_type {
-            ChannelType::Three => (),
+            ChannelType::Three { .. } => (),
             _ => {
                 self.envelope_timer = self.nrx2 & 0b111;
             }
@@ -185,8 +185,8 @@ impl Channel {
                 // TODO - actually do something here
                 *sweep_timer = 4;
             }
-            ChannelType::Three => {
-                // reset wave ram
+            ChannelType::Three { ref mut wave_index } => {
+                *wave_index = 0;
             }
             ChannelType::Four => {
                 // lsfr
@@ -209,7 +209,7 @@ impl Channel {
     fn write_byte(&mut self, address_offset: u16, value: u8) {
         match address_offset {
             0 => match self.channel_type {
-                ChannelType::One { .. } | ChannelType::Three => self.nrx0 = value,
+                ChannelType::One { .. } | ChannelType::Three { .. } => self.nrx0 = value,
                 _ => (),
             },
             1 => self.nrx1 = value,
@@ -244,12 +244,12 @@ impl Channel {
         match address_offset {
             0 => match self.channel_type {
                 ChannelType::One { .. } => self.nrx0 | 0b1000_0000,
-                ChannelType::Three => self.nrx0 | 0b0111_1111,
+                ChannelType::Three { .. } => self.nrx0 | 0b0111_1111,
                 _ => 0xFF, // Doesn't exist, so read 0xFF
             },
             1 => self.nrx1 | 0b0011_1111,
             2 => match self.channel_type {
-                ChannelType::Three => self.nrx2 | 0b1001_1111,
+                ChannelType::Three { .. } => self.nrx2 | 0b1001_1111,
                 _ => self.nrx2,
             },
             3 => match self.channel_type {
@@ -643,5 +643,25 @@ mod tests {
 
         apu.write_byte(0xFF24, 0xFF);
         assert_eq!(apu.read_byte(0xFF24), 0xFF);
+    }
+
+    #[test]
+    fn test_trigger_resets_wave_index() {
+        let mut c = Channel::new_ch3();
+        match c.channel_type {
+            ChannelType::Three { ref mut wave_index } => {
+                *wave_index = 4;
+            }
+            _ => assert!(false),
+        }
+
+        c.trigger();
+
+        match c.channel_type {
+            ChannelType::Three { wave_index } => {
+                assert_eq!(wave_index, 0)
+            }
+            _ => assert!(false),
+        }
     }
 }
