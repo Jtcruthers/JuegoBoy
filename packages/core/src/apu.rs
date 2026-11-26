@@ -48,6 +48,7 @@ struct Channel {
     /// Channel will turn off if length timer expires while enabled, or if ch1 period sweep
     /// overflows, or the DAC is turned off
     enabled: bool,
+    volume: u8,
 
     nrx0: u8,
     nrx1: u8,
@@ -66,6 +67,7 @@ impl Channel {
     fn new_ch1() -> Self {
         Channel {
             enabled: true,
+            volume: 0,
 
             nrx0: 0,
             nrx1: 0,
@@ -84,6 +86,7 @@ impl Channel {
     fn new_ch2() -> Self {
         Channel {
             enabled: true,
+            volume: 0,
 
             nrx0: 0,
             nrx1: 0,
@@ -102,6 +105,7 @@ impl Channel {
     fn new_ch3() -> Self {
         Channel {
             enabled: true,
+            volume: 0,
 
             nrx0: 0,
             nrx1: 0,
@@ -120,6 +124,7 @@ impl Channel {
     fn new_ch4() -> Self {
         Channel {
             enabled: true,
+            volume: 0,
 
             nrx0: 0,
             nrx1: 0,
@@ -132,6 +137,61 @@ impl Channel {
             envelope_timer: 0,
 
             channel_type: ChannelType::Four,
+        }
+    }
+
+    /// Enables the channel, resets volume to initial value, and does certain things per channel:
+    /// * ch1, ch2, ch3 - set period divider to AUDxLOW and AUDxHIGH
+    /// * ch1, ch2, ch4 - resets envelope timer
+    /// * ch1 - Sweetp does stuff for ch1
+    /// * ch3 - waveram is reset but not refilled
+    /// * ch4 - lsfr bits are reset
+    fn trigger(&mut self) {
+        self.enabled = true;
+
+        self.volume = (self.nrx2 & 0b1111_0000) >> 4;
+
+        if self.length_timer == 0 {
+            let length_mask = match self.channel_type {
+                ChannelType::Three => 0xF, // Only channel3 uses the entire register for length
+                _ => 0b0011_1111,
+            };
+            self.length_timer = self.nrx1 & length_mask;
+        }
+
+        // Set period
+        match self.channel_type {
+            ChannelType::Four => (),
+            _ => {
+                let high = self.nrx4 as u16 & 0b111;
+                let low = self.nrx3 as u16;
+                let period = (high << 7) | low;
+                self.period_counter = period;
+            }
+        }
+
+        // Reset envelope
+        match self.channel_type {
+            ChannelType::Three => (),
+            _ => {
+                self.envelope_timer = self.nrx2 & 0b111;
+            }
+        }
+
+        match self.channel_type {
+            ChannelType::One {
+                ref mut sweep_timer,
+            } => {
+                // TODO - actually do something here
+                *sweep_timer = 4;
+            }
+            ChannelType::Three => {
+                // waveram
+            }
+            ChannelType::Four => {
+                // lsfr
+            }
+            _ => (),
         }
     }
 
@@ -153,9 +213,25 @@ impl Channel {
                 _ => (),
             },
             1 => self.nrx1 = value,
-            2 => self.nrx2 = value,
+            2 => {
+                self.nrx2 = value;
+                if value & 0b1111_1000 == 0 {
+                    // disable dac and channel
+                    self.enabled = false;
+                }
+            }
             3 => self.nrx3 = value,
-            4 => self.nrx4 = value,
+            4 => {
+                self.nrx4 = value;
+                // if Triggered
+                if value & 0b1000_0000 != 0 {
+                    self.trigger();
+                }
+                // If length enable bit set
+                if value & 0b0100_0000 != 0 {
+                    // enable length for ch1, ch2, ch3
+                }
+            }
             _ => panic!("Invalid channel write address: {:X}", address_offset),
         }
     }
@@ -268,6 +344,10 @@ impl APU {
     }
 
     pub fn write_byte(&mut self, address: u16, value: u8) {
+        if self.nr52 & 0b1000_0000 == 0 && address < 0xFF30 {
+            // If audio is off, writes here are ignored, but wave_ram is still accissible
+            return;
+        }
         match address {
             0xFF26 => self.nr52 = value & 0b1000_0000, // Only bit 7 can be set
             0xFF25 => self.nr51 = value,
@@ -540,6 +620,7 @@ mod tests {
     #[test]
     fn test_nr51() {
         let mut apu = APU::new();
+        apu.nr52 = 0xFF;
 
         apu.write_byte(0xFF25, 0);
         assert_eq!(apu.read_byte(0xFF25), 0);
@@ -554,6 +635,7 @@ mod tests {
     #[test]
     fn test_nr50() {
         let mut apu = APU::new();
+        apu.nr52 = 0xFF;
 
         apu.write_byte(0xFF24, 0);
         assert_eq!(apu.read_byte(0xFF24), 0);
