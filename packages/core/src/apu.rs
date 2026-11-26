@@ -218,13 +218,6 @@ impl APU {
     }
 
     pub fn tick(&mut self, timer_div: u8) {
-        // increment div_apu when bit 4 of timer_div goes from 1 to 0
-        // I think since the timer is kind of the driver, the div_apu increment should be handled
-        // first before the rest of the tick.
-        if self.timer_div_last & 0b0001_0000 > 0 && timer_div & 0b0001_0000 == 0 {
-            self.div_apu += 1;
-        }
-
         if self.nr52 & 0b1000_0000 == 0 {
             // APU is disabled, reset channels, but keep wave ram. Timer is uneffected
             self.channel1.reset();
@@ -232,6 +225,18 @@ impl APU {
             self.channel3.reset();
             self.channel4.reset();
 
+            return;
+        }
+
+        // increment div_apu when bit 4 of timer_div goes from 1 to 0
+        // I think since the timer is kind of the driver, the div_apu increment should be handled
+        // first before the rest of the tick.
+        let timer_div_last = self.timer_div_last;
+        self.timer_div_last = timer_div;
+        if timer_div_last & 0b0001_0000 > 0 && timer_div & 0b0001_0000 == 0 {
+            self.div_apu += 1;
+        } else {
+            // work here is done, we only actually do the stuff when div_apu ticks
             return;
         }
 
