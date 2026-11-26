@@ -255,7 +255,7 @@ impl APU {
 
     pub fn write_byte(&mut self, address: u16, value: u8) {
         match address {
-            0xFF26 => self.nr52 = value & 0b1111_0000, // Only bit 7 can be set
+            0xFF26 => self.nr52 = value & 0b1000_0000, // Only bit 7 can be set
             0xFF25 => self.nr51 = value,
             0xFF24 => self.nr50 = value,
             0xFF10..=0xFF14 => self.channel1.write_byte(address - 0xFF10, value),
