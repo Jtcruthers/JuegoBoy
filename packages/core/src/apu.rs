@@ -44,6 +44,11 @@ enum WaveformGenerator {
 /// based on the type of channel. Since the waveform is the biggest difference, it's an Enum that I
 /// can match on
 struct Channel {
+    /// Only enabled by triggering the channel, not writing to NR52
+    /// Channel will turn off if length timer expires while enabled, or if ch1 period sweep
+    /// overflows, or the DAC is turned off
+    enabled: bool,
+
     nrx0: u8,
     nrx1: u8,
     nrx2: u8,
@@ -60,6 +65,8 @@ struct Channel {
 impl Channel {
     fn new_ch1() -> Self {
         Channel {
+            enabled: true,
+
             nrx0: 0,
             nrx1: 0,
             nrx2: 0,
@@ -76,6 +83,8 @@ impl Channel {
 
     fn new_ch2() -> Self {
         Channel {
+            enabled: true,
+
             nrx0: 0,
             nrx1: 0,
             nrx2: 0,
@@ -92,6 +101,8 @@ impl Channel {
 
     fn new_ch3() -> Self {
         Channel {
+            enabled: true,
+
             nrx0: 0,
             nrx1: 0,
             nrx2: 0,
@@ -108,6 +119,8 @@ impl Channel {
 
     fn new_ch4() -> Self {
         Channel {
+            enabled: true,
+
             nrx0: 0,
             nrx1: 0,
             nrx2: 0,
@@ -122,13 +135,13 @@ impl Channel {
         }
     }
 
-    fn get_generator(&self) -> WaveformGenerator {
-        match self.channel_type {
-            ChannelType::One { .. } | ChannelType::Two => WaveformGenerator::Pulse,
-            ChannelType::Three => WaveformGenerator::Wave,
-            ChannelType::Four => WaveformGenerator::LFSR,
-        }
-    }
+    // fn get_generator(&self) -> WaveformGenerator {
+    //     match self.channel_type {
+    //         ChannelType::One { .. } | ChannelType::Two => WaveformGenerator::Pulse,
+    //         ChannelType::Three => WaveformGenerator::Wave,
+    //         ChannelType::Four => WaveformGenerator::LFSR,
+    //     }
+    // }
 
     /// Write the byte to the register at the address. The APU is responsible for giving the Channel
     /// the offset, so if you want to write to nrx2 for any channel, it would call write_byte(2, value)
@@ -218,16 +231,6 @@ impl APU {
     }
 
     pub fn tick(&mut self, timer_div: u8) {
-        if self.nr52 & 0b1000_0000 == 0 {
-            // APU is disabled, reset channels, but keep wave ram. Timer is uneffected
-            self.channel1.reset();
-            self.channel2.reset();
-            self.channel3.reset();
-            self.channel4.reset();
-
-            return;
-        }
-
         // increment div_apu when bit 4 of timer_div goes from 1 to 0
         // I think since the timer is kind of the driver, the div_apu increment should be handled
         // first before the rest of the tick.
@@ -237,6 +240,17 @@ impl APU {
             self.div_apu += 1;
         } else {
             // work here is done, we only actually do the stuff when div_apu ticks
+            return;
+        }
+
+        // Has to be after the tick, as being disabled doesn't affect div-apu
+        if self.nr52 & 0b1000_0000 == 0 {
+            // APU is disabled, reset channels, but keep wave ram. Timer is uneffected
+            self.channel1.reset();
+            self.channel2.reset();
+            self.channel3.reset();
+            self.channel4.reset();
+
             return;
         }
 
@@ -269,7 +283,23 @@ impl APU {
 
     pub fn read_byte(&self, address: u16) -> u8 {
         match address {
-            0xFF26 => self.nr52 | 0b0111_0000, // Bits 6-4 are empty, so set them
+            0xFF26 => {
+                let mut nr52 = self.nr52 | 0b1111_0000;
+                if self.channel1.enabled {
+                    nr52 |= 0b1
+                }
+                if self.channel2.enabled {
+                    nr52 |= 0b10
+                }
+                if self.channel3.enabled {
+                    nr52 |= 0b100
+                }
+                if self.channel4.enabled {
+                    nr52 |= 0b1000
+                }
+
+                nr52
+            }
             0xFF25 => self.nr51,
             0xFF24 => self.nr50,
             0xFF1B => 0xFF, // nr31 is write-only, return 0xFF
@@ -484,5 +514,54 @@ mod tests {
 
         apu.channel4.nrx4 = 0xFF;
         assert_eq!(apu.read_byte(0xFF23), 0xFF);
+    }
+
+    #[test]
+    fn test_read_nr52_channel_enabled() {
+        let mut apu = APU::new();
+
+        apu.write_byte(0xFF26, 0);
+
+        assert_eq!(apu.read_byte(0xFF26), 0xFF);
+
+        apu.channel1.enabled = false;
+        assert_eq!(apu.read_byte(0xFF26), 0b1111_1110);
+
+        apu.channel2.enabled = false;
+        assert_eq!(apu.read_byte(0xFF26), 0b1111_1100);
+
+        apu.channel3.enabled = false;
+        assert_eq!(apu.read_byte(0xFF26), 0b1111_1000);
+
+        apu.channel4.enabled = false;
+        assert_eq!(apu.read_byte(0xFF26), 0b1111_0000);
+    }
+
+    #[test]
+    fn test_nr51() {
+        let mut apu = APU::new();
+
+        apu.write_byte(0xFF25, 0);
+        assert_eq!(apu.read_byte(0xFF25), 0);
+
+        apu.write_byte(0xFF25, 0xAA);
+        assert_eq!(apu.read_byte(0xFF25), 0xAA);
+
+        apu.write_byte(0xFF25, 0xFF);
+        assert_eq!(apu.read_byte(0xFF25), 0xFF);
+    }
+
+    #[test]
+    fn test_nr50() {
+        let mut apu = APU::new();
+
+        apu.write_byte(0xFF24, 0);
+        assert_eq!(apu.read_byte(0xFF24), 0);
+
+        apu.write_byte(0xFF24, 0xAA);
+        assert_eq!(apu.read_byte(0xFF24), 0xAA);
+
+        apu.write_byte(0xFF24, 0xFF);
+        assert_eq!(apu.read_byte(0xFF24), 0xFF);
     }
 }
