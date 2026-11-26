@@ -153,7 +153,7 @@ impl Channel {
 
         if self.length_timer == 0 {
             let length_mask = match self.channel_type {
-                ChannelType::Three => 0xF, // Only channel3 uses the entire register for length
+                ChannelType::Three => 0xFF, // Only channel3 uses the entire register for length
                 _ => 0b0011_1111,
             };
             self.length_timer = self.nrx1 & length_mask;
@@ -165,7 +165,7 @@ impl Channel {
             _ => {
                 let high = self.nrx4 as u16 & 0b111;
                 let low = self.nrx3 as u16;
-                let period = (high << 7) | low;
+                let period = (high << 8) | low;
                 self.period_counter = period;
             }
         }
@@ -186,7 +186,7 @@ impl Channel {
                 *sweep_timer = 4;
             }
             ChannelType::Three => {
-                // waveram
+                // reset wave ram
             }
             ChannelType::Four => {
                 // lsfr
@@ -344,7 +344,7 @@ impl APU {
     }
 
     pub fn write_byte(&mut self, address: u16, value: u8) {
-        if self.nr52 & 0b1000_0000 == 0 && address < 0xFF30 {
+        if self.nr52 & 0b1000_0000 == 0 && address < 0xFF24 {
             // If audio is off, writes here are ignored, but wave_ram is still accissible
             return;
         }
@@ -364,7 +364,7 @@ impl APU {
     pub fn read_byte(&self, address: u16) -> u8 {
         match address {
             0xFF26 => {
-                let mut nr52 = self.nr52 | 0b1111_0000;
+                let mut nr52 = self.nr52 | 0b0111_0000;
                 if self.channel1.enabled {
                     nr52 |= 0b1
                 }
@@ -602,25 +602,24 @@ mod tests {
 
         apu.write_byte(0xFF26, 0);
 
-        assert_eq!(apu.read_byte(0xFF26), 0xFF);
+        assert_eq!(apu.read_byte(0xFF26), 0b0111_1111);
 
         apu.channel1.enabled = false;
-        assert_eq!(apu.read_byte(0xFF26), 0b1111_1110);
+        assert_eq!(apu.read_byte(0xFF26), 0b0111_1110);
 
         apu.channel2.enabled = false;
-        assert_eq!(apu.read_byte(0xFF26), 0b1111_1100);
+        assert_eq!(apu.read_byte(0xFF26), 0b0111_1100);
 
         apu.channel3.enabled = false;
-        assert_eq!(apu.read_byte(0xFF26), 0b1111_1000);
+        assert_eq!(apu.read_byte(0xFF26), 0b0111_1000);
 
         apu.channel4.enabled = false;
-        assert_eq!(apu.read_byte(0xFF26), 0b1111_0000);
+        assert_eq!(apu.read_byte(0xFF26), 0b0111_0000);
     }
 
     #[test]
     fn test_nr51() {
         let mut apu = APU::new();
-        apu.nr52 = 0xFF;
 
         apu.write_byte(0xFF25, 0);
         assert_eq!(apu.read_byte(0xFF25), 0);
@@ -635,7 +634,6 @@ mod tests {
     #[test]
     fn test_nr50() {
         let mut apu = APU::new();
-        apu.nr52 = 0xFF;
 
         apu.write_byte(0xFF24, 0);
         assert_eq!(apu.read_byte(0xFF24), 0);
