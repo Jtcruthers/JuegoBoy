@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "packages/core",
+  "packages/ui-core",
   "packages/gui",
   "packages/web",
 ]
