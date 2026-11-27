@@ -10,7 +10,7 @@ use log::*;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
-use cpal::traits::{DeviceTrait, HostTrait};
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
 pub struct Audio {
     stream: cpal::Stream,
@@ -74,6 +74,33 @@ impl Audio {
             queue,
             sample_rate,
         };
+        audio.play();
         Some(audio)
+    }
+
+    /// pushes a set of samples to be played onto the queue.
+    /// The queue is capped around 100ms to stop emulator from getting too out of sync
+    pub fn push(&self, samples: &[f32]) {
+        let mut queue = self.queue.lock().unwrap();
+        queue.extend(samples);
+
+        // Keep it a multiple of 2 so left and right never swap
+        let max = (self.sample_rate as usize / 10) * 2;
+        if queue.len() > max {
+            let excess = (queue.len() - max + 1) & !1;
+            queue.drain(..excess);
+        }
+    }
+
+    pub fn play(&self) {
+        if let Err(err) = self.stream.play() {
+            warn!("Couldn't start audio: {err}");
+        }
+    }
+
+    pub fn pause(&self) {
+        if let Err(err) = self.stream.pause() {
+            warn!("Couldn't pause audio: {err}");
+        }
     }
 }
