@@ -1,5 +1,5 @@
 /*!
-* This module is for the shared frontend logic that doesn't really fit into the actual gameboy
+* This package is for the shared frontend logic that doesn't really fit into the actual gameboy
 * emulator. The more I researched handling the audio, the more it seemed I'd have to duplicate it
 * for web and native. So I wanted to move it to a centralized location, but wanted to keep core as
 * strictly the gameboy only. I then realized I had to port over the catch-up frame rate from web
@@ -10,5 +10,6 @@
 */
 
 mod audio;
+mod player;
 
-pub use audio::Audio;
+pub use player::Player;

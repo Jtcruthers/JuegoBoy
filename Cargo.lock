@@ -1911,6 +1911,7 @@ version = "0.1.0"
 dependencies = [
  "cpal",
  "env_logger",
+ "gameboy_core",
  "log",
 ]
 

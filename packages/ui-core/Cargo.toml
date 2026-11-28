@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 cpal = { version = "0.18.2", features = ["wasm-bindgen"] }
 log = { workspace = true }
+gameboy_core = { path = "../core" }
 
 [dev-dependencies]
 env_logger = { workspace = true }
