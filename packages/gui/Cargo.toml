@@ -9,5 +9,6 @@ env_logger = { workspace = true }
 log = { workspace = true }
 
 gameboy_core = { path = "../core" }
+ui_core = { path = "../ui-core" }
 winit = "0.30.13"
 softbuffer = "0.4.8"

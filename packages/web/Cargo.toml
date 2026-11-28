@@ -9,4 +9,5 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 console_error_panic_hook = "0.1.7"
 gameboy_core = { path = "../core" }
+ui_core = { path = "../ui-core" }
 wasm-bindgen = "0.2.130"

@@ -4,7 +4,6 @@ export { Button };
 
 const WIDTH = 160;
 const HEIGHT = 144;
-const MS_PER_FRAME = (70224 / 4194304) * 1000; // ≈ 59.73 fps
 const SAVE_INTERVAL_MS = 5000;
 
 /** KeyboardEvent.code → button. Same layout as the native frontend. */
@@ -45,7 +44,6 @@ export async function mount(canvas, { romInput, saveInput, keyTarget = canvas } 
   let lastSaved = null;
   let paused = false;
   let lastTime = 0;
-  let behind = 0;
 
   function draw() {
     const pixels = new Uint8ClampedArray(emulator.frame());
@@ -72,32 +70,29 @@ export async function mount(canvas, { romInput, saveInput, keyTarget = canvas } 
     for (const button of Object.values(KEYS)) emulator?.release_button(button);
   }
 
-  // requestAnimationFrame runs based on the display's refresh rate,
-  // so run however many frames are due.
-  // TODO - port this to the gui
+  // requestAnimationFrame runs at the display's refresh rate, which isn't the gameboy's ~59.73 fps,
+  // so hand the elapsed time to the emulator and let it run however many frames are due.
   function loop(now) {
     requestAnimationFrame(loop);
     if (!emulator || paused) return;
 
-    behind = Math.min(behind + now - lastTime, MS_PER_FRAME * 5);
+    const elapsed = now - lastTime;
     lastTime = now;
-    if (behind < MS_PER_FRAME) return;
-
-    while (behind >= MS_PER_FRAME) {
-      emulator.step_frame();
-      behind -= MS_PER_FRAME;
-    }
-    draw();
+    if (emulator.advance(elapsed)) draw();
   }
 
   function onKey(e) {
     const button = KEYS[e.code];
     if (button === undefined || !emulator) return;
     e.preventDefault();
+    emulator.resume_audio(); // browsers only allow audio to start from a user interaction
     if (e.type === "keydown") emulator.press_button(button);
     else emulator.release_button(button);
   }
 
+  canvas.addEventListener("pointerdown", () => {
+    if (!paused) emulator?.resume_audio();
+  });
   keyTarget.addEventListener("keydown", onKey);
   keyTarget.addEventListener("keyup", onKey);
   keyTarget.addEventListener("blur", releaseAll);
@@ -158,7 +153,7 @@ export async function mount(canvas, { romInput, saveInput, keyTarget = canvas } 
       lastSaved = btoa(String.fromCharCode(...emulator.get_cartridge_ram()));
 
       lastTime = performance.now();
-      behind = 0;
+      emulator.resume_audio(); // may be refused until the next key or click; that's fine
     },
 
     /**
@@ -199,7 +194,7 @@ export async function mount(canvas, { romInput, saveInput, keyTarget = canvas } 
       emulator.free();
       emulator = next;
       lastTime = performance.now();
-      behind = 0;
+      emulator.resume_audio();
       save();
     },
 
@@ -220,11 +215,13 @@ export async function mount(canvas, { romInput, saveInput, keyTarget = canvas } 
     pause() {
       paused = true;
       releaseAll();
+      emulator?.pause_audio();
     },
 
     resume() {
       paused = false;
       lastTime = performance.now(); // don't fast-forward through the pause
+      emulator?.resume_audio();
     },
   };
 

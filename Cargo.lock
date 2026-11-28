@@ -674,6 +674,7 @@ version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
  "gameboy_core",
+ "ui_core",
  "wasm-bindgen",
 ]
 
@@ -719,6 +720,7 @@ dependencies = [
  "gameboy_core",
  "log",
  "softbuffer",
+ "ui_core",
  "winit",
 ]
 

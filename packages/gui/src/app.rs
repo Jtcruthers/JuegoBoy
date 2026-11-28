@@ -12,7 +12,8 @@ use winit::window::{Window, WindowId};
 
 use softbuffer::{Context, Surface};
 
-use gameboy_core::{Gameboy, LCD_HEIGHT, LCD_WIDTH};
+use gameboy_core::{LCD_HEIGHT, LCD_WIDTH};
+use ui_core::Player;
 
 use crate::user_input;
 
@@ -22,7 +23,9 @@ const CYCLES_PER_FRAME: usize = 70224;
 const SECONDS_PER_FRAME: f64 = CYCLES_PER_FRAME as f64 / DOT as f64;
 
 pub struct App {
-    gameboy: Gameboy,
+    player: Player,
+    /// When we last advanced the emulator, to measure how much real time has passed since
+    last_tick: Instant,
     save_path: PathBuf,
     context: Context<OwnedDisplayHandle>,
     state: AppState,
@@ -43,19 +46,18 @@ enum AppState {
 
 impl App {
     pub fn new(rom: Vec<u8>, save_path: PathBuf, context: Context<OwnedDisplayHandle>) -> Self {
-        // TODO - get the device's sample rate to pass in
-        let sample_rate = 48000;
-        let mut gameboy = Gameboy::new(rom, sample_rate);
+        let mut player = Player::new(rom);
 
         if let Ok(save) = fs::read(&save_path) {
-            match gameboy.load_cartridge_ram(&save) {
+            match player.gameboy.load_cartridge_ram(&save) {
                 Ok(()) => log::info!("Loaded save from {}", save_path.display()),
                 Err(err) => log::warn!("Ignoring {}: {}", save_path.display(), err),
             }
         }
 
         Self {
-            gameboy: gameboy,
+            player,
+            last_tick: Instant::now(),
             save_path: save_path,
             context: context,
             state: AppState::Initial,
@@ -91,10 +93,14 @@ impl ApplicationHandler for App {
                 unreachable!("got about to wait event while not running");
             };
             let window = surface.window().clone();
-            // TODO - Move all of this to ui-core
-            self.gameboy.step_frame();
-            self.gameboy.take_samples();
-            window.request_redraw();
+
+            // Wake-ups aren't exactly on time, so let the player work out how many frames are due
+            let now = Instant::now();
+            let elapsed = now - self.last_tick;
+            self.last_tick = now;
+            if self.player.advance(elapsed) {
+                window.request_redraw();
+            }
         }
     }
 
@@ -151,7 +157,7 @@ impl ApplicationHandler for App {
             }
             WindowEvent::CloseRequested => {
                 println!("The close button was pressed; stopping");
-                let ram = self.gameboy.get_cartridge_ram();
+                let ram = self.player.gameboy.get_cartridge_ram();
                 if !ram.is_empty() {
                     match fs::write(&self.save_path, ram) {
                         Ok(()) => log::info!("Saved to {}", self.save_path.display()),
@@ -163,14 +169,14 @@ impl ApplicationHandler for App {
                 event_loop.exit();
             }
             WindowEvent::KeyboardInput { event, .. } => {
-                user_input::handle_user_input(&mut self.gameboy, event)
+                user_input::handle_user_input(&mut self.player.gameboy, event)
             }
             WindowEvent::RedrawRequested => {
                 let size = surface.window().inner_size();
                 let width = size.width as usize;
                 let height = size.height as usize;
 
-                let frame = self.gameboy.get_frame();
+                let frame = self.player.gameboy.get_frame();
                 let mut buffer = surface.buffer_mut().unwrap();
 
                 for adjacent_y in 0..height {

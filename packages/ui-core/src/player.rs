@@ -20,6 +20,7 @@ const FRAME_TIME: Duration = Duration::from_nanos(FRAME_TIME_U64);
 /// drop any time past 5 frames
 const MAX_TIME_DELTA: Duration = Duration::from_nanos(FRAME_TIME_U64 * 5);
 
+/// The Gameboy wrapped in a frontend-agnostic player that handles the system's audio, timing, and what not
 pub struct Player {
     pub gameboy: Gameboy,
     audio: Option<Audio>,
@@ -31,7 +32,7 @@ impl Player {
         let audio = Audio::new();
 
         // Without an audio device we still need a real rate, since the APU divides by it. The
-        // samples it makes are just dropped in step_frame.
+        // samples it makes are just dropped in advance.
         let sample_rate = match &audio {
             Some(a) => a.sample_rate,
             None => 48_000,
