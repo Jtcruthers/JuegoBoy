@@ -333,7 +333,7 @@ impl APU {
             // TODO - figure out the actual samples
             let num = RandomState::new().build_hasher().finish() as f32;
             let unit = num / (u32::MAX as f32); // 0.0 to 1.0
-            let sample = unit * 2.0 - 1.0; // -1.0 to 1.0
+            let sample = (unit * 0.2 - 0.1); // -0.1 to 0.1
             self.push_samples(sample, sample);
         }
 
