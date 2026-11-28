@@ -21,7 +21,10 @@
 * All of the components are timers except for each channel's Period Counter.
 */
 
-use std::ops::Div;
+use std::{
+    hash::{BuildHasher, Hasher, RandomState},
+    ops::Div,
+};
 
 /// Enum for the various channels in the APU, since they all have differences
 enum ChannelType {
@@ -328,7 +331,10 @@ impl APU {
         if self.sample_timer as f32 >= self.cycles_per_sample {
             self.sample_timer = 0;
             // TODO - figure out the actual samples
-            self.push_samples(0.0, 0.0);
+            let num = RandomState::new().build_hasher().finish() as f32;
+            let unit = num / (u32::MAX as f32); // 0.0 to 1.0
+            let sample = unit * 2.0 - 1.0; // -1.0 to 1.0
+            self.push_samples(sample, sample);
         }
 
         // increment div_apu when bit 4 of timer_div goes from 1 to 0
