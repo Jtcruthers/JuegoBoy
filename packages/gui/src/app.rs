@@ -43,7 +43,9 @@ enum AppState {
 
 impl App {
     pub fn new(rom: Vec<u8>, save_path: PathBuf, context: Context<OwnedDisplayHandle>) -> Self {
-        let mut gameboy = Gameboy::new(rom);
+        // TODO - get the device's sample rate to pass in
+        let sample_rate = 48000;
+        let mut gameboy = Gameboy::new(rom, sample_rate);
 
         if let Ok(save) = fs::read(&save_path) {
             match gameboy.load_cartridge_ram(&save) {
@@ -89,7 +91,9 @@ impl ApplicationHandler for App {
                 unreachable!("got about to wait event while not running");
             };
             let window = surface.window().clone();
+            // TODO - Move all of this to ui-core
             self.gameboy.step_frame();
+            self.gameboy.take_samples();
             window.request_redraw();
         }
     }

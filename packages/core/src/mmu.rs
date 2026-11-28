@@ -40,7 +40,7 @@ pub struct MMU {
 }
 
 impl MMU {
-    pub fn new(cartridge: Cartridge) -> Self {
+    pub fn new(cartridge: Cartridge, audio_sample_rate: u32) -> Self {
         MMU {
             wram: [0; 0x2000],
             high_ram: [0; 0x7F],
@@ -52,7 +52,7 @@ impl MMU {
             joypad: Joypad::new(),
             ppu: PPU::new(),
             timer: Timer::new(),
-            apu: APU::new(),
+            apu: APU::new(audio_sample_rate),
         }
     }
 

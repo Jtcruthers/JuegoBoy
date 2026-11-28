@@ -47,13 +47,18 @@ pub struct Emulator {
 impl Emulator {
     #[wasm_bindgen(constructor)]
     pub fn new(rom: Vec<u8>) -> Emulator {
+        // TODO - get the device's sample rate to pass in
+        let sample_rate = 48000;
         Emulator {
-            gameboy: Gameboy::new(rom),
+            // TODO - use the audio device's rate once gameboy_frontend::Audio is wired in
+            gameboy: Gameboy::new(rom, sample_rate),
         }
     }
 
     pub fn step_frame(&mut self) {
+        // TODO - Move all of this to ui-core
         self.gameboy.step_frame();
+        self.gameboy.take_samples();
     }
 
     /// Returns the RGBA bytes for the frame. Since canvas takes a separate byte array for R, G, B, and A,

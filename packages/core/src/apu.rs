@@ -21,6 +21,8 @@
 * All of the components are timers except for each channel's Period Counter.
 */
 
+use std::ops::Div;
+
 /// Enum for the various channels in the APU, since they all have differences
 enum ChannelType {
     One { sweep_timer: u8 },
@@ -287,10 +289,19 @@ pub struct APU {
 
     div_apu: u32,
     timer_div_last: u8,
+
+    /// The host's playback rate in hz. The APU's output changes every M cycle, which is 1+ million
+    /// times per second. So we just use whatever sample rate is asked for since that is too many
+    /// to actually use
+    cycles_per_sample: f32,
+    sample_timer: u32,
+    pub samples: Vec<f32>,
 }
 
+const M_CYCLES_PER_SECOND: f32 = 1_048_576.0;
+
 impl APU {
-    pub fn new() -> Self {
+    pub fn new(sample_rate: u32) -> Self {
         APU {
             channel1: Channel::new_ch1(),
             channel2: Channel::new_ch2(),
@@ -303,10 +314,23 @@ impl APU {
 
             div_apu: 0,
             timer_div_last: 0,
+
+            cycles_per_sample: M_CYCLES_PER_SECOND.div(sample_rate as f32),
+            sample_timer: 0,
+            samples: Vec::new(),
         }
     }
 
     pub fn tick(&mut self, timer_div: u8) {
+        // We need to take a sample every M_CYCLES_PER_SECOND / sample_rate to resample for
+        // the actual device's rate
+        self.sample_timer += 1;
+        if self.sample_timer as f32 >= self.cycles_per_sample {
+            self.sample_timer = 0;
+            // TODO - figure out the actual samples
+            self.push_samples(0.0, 0.0);
+        }
+
         // increment div_apu when bit 4 of timer_div goes from 1 to 0
         // I think since the timer is kind of the driver, the div_apu increment should be handled
         // first before the rest of the tick.
@@ -392,6 +416,12 @@ impl APU {
             _ => panic!("Invalid APU read address: {:X}", address),
         }
     }
+
+    /// Push two samples onto the queue, one for the left channel and one for the right channel
+    fn push_samples(&mut self, left_sample: f32, right_sample: f32) {
+        self.samples.push(left_sample);
+        self.samples.push(right_sample);
+    }
 }
 
 #[cfg(test)]
@@ -400,7 +430,7 @@ mod tests {
 
     #[test]
     fn test_read_nr10() {
-        let mut apu = APU::new();
+        let mut apu = APU::new(48_000);
 
         apu.channel1.nrx0 = 0;
         assert_eq!(apu.read_byte(0xFF10), 0b1000_0000);
@@ -411,7 +441,7 @@ mod tests {
 
     #[test]
     fn test_read_nr11() {
-        let mut apu = APU::new();
+        let mut apu = APU::new(48_000);
 
         apu.channel1.nrx1 = 0;
         assert_eq!(apu.read_byte(0xFF11), 0b0011_1111);
@@ -422,7 +452,7 @@ mod tests {
 
     #[test]
     fn test_read_nr12() {
-        let mut apu = APU::new();
+        let mut apu = APU::new(48_000);
 
         apu.channel1.nrx2 = 0;
         assert_eq!(apu.read_byte(0xFF12), 0);
@@ -433,7 +463,7 @@ mod tests {
 
     #[test]
     fn test_read_nr13() {
-        let mut apu = APU::new();
+        let mut apu = APU::new(48_000);
 
         apu.channel1.nrx3 = 0;
         assert_eq!(apu.read_byte(0xFF13), 0xFF);
@@ -444,7 +474,7 @@ mod tests {
 
     #[test]
     fn test_read_n1x4() {
-        let mut apu = APU::new();
+        let mut apu = APU::new(48_000);
 
         apu.channel1.nrx4 = 0;
         assert_eq!(apu.read_byte(0xFF14), 0b1011_1111);
@@ -455,7 +485,7 @@ mod tests {
 
     #[test]
     fn test_read_nr21() {
-        let mut apu = APU::new();
+        let mut apu = APU::new(48_000);
 
         apu.channel2.nrx1 = 0;
         assert_eq!(apu.read_byte(0xFF16), 0b0011_1111);
@@ -466,7 +496,7 @@ mod tests {
 
     #[test]
     fn test_read_nr22() {
-        let mut apu = APU::new();
+        let mut apu = APU::new(48_000);
 
         apu.channel2.nrx2 = 0;
         assert_eq!(apu.read_byte(0xFF17), 0);
@@ -477,7 +507,7 @@ mod tests {
 
     #[test]
     fn test_read_nr23() {
-        let mut apu = APU::new();
+        let mut apu = APU::new(48_000);
 
         apu.channel2.nrx3 = 0;
         assert_eq!(apu.read_byte(0xFF18), 0xFF);
@@ -488,7 +518,7 @@ mod tests {
 
     #[test]
     fn test_read_nr24() {
-        let mut apu = APU::new();
+        let mut apu = APU::new(48_000);
 
         apu.channel2.nrx4 = 0;
         assert_eq!(apu.read_byte(0xFF19), 0b1011_1111);
@@ -499,7 +529,7 @@ mod tests {
 
     #[test]
     fn test_read_nr30() {
-        let mut apu = APU::new();
+        let mut apu = APU::new(48_000);
 
         apu.channel3.nrx0 = 0;
         assert_eq!(apu.read_byte(0xFF1A), 0b0111_1111);
@@ -510,7 +540,7 @@ mod tests {
 
     #[test]
     fn test_read_nr31() {
-        let mut apu = APU::new();
+        let mut apu = APU::new(48_000);
 
         apu.channel3.nrx1 = 0;
         assert_eq!(apu.read_byte(0xFF1B), 0xFF);
@@ -521,7 +551,7 @@ mod tests {
 
     #[test]
     fn test_read_nr32() {
-        let mut apu = APU::new();
+        let mut apu = APU::new(48_000);
 
         apu.channel3.nrx2 = 0;
         assert_eq!(apu.read_byte(0xFF1C), 0b1001_1111);
@@ -532,7 +562,7 @@ mod tests {
 
     #[test]
     fn test_read_nr33() {
-        let mut apu = APU::new();
+        let mut apu = APU::new(48_000);
 
         apu.channel3.nrx3 = 0;
         assert_eq!(apu.read_byte(0xFF1D), 0xFF);
@@ -543,7 +573,7 @@ mod tests {
 
     #[test]
     fn test_read_nr34() {
-        let mut apu = APU::new();
+        let mut apu = APU::new(48_000);
 
         apu.channel3.nrx4 = 0;
         assert_eq!(apu.read_byte(0xFF1E), 0b1011_1111);
@@ -554,7 +584,7 @@ mod tests {
 
     #[test]
     fn test_read_nr41() {
-        let mut apu = APU::new();
+        let mut apu = APU::new(48_000);
 
         apu.channel4.nrx1 = 0;
         assert_eq!(apu.read_byte(0xFF20), 0xFF);
@@ -565,7 +595,7 @@ mod tests {
 
     #[test]
     fn test_read_nr42() {
-        let mut apu = APU::new();
+        let mut apu = APU::new(48_000);
 
         apu.channel4.nrx2 = 0;
         assert_eq!(apu.read_byte(0xFF21), 0);
@@ -576,7 +606,7 @@ mod tests {
 
     #[test]
     fn test_read_nr43() {
-        let mut apu = APU::new();
+        let mut apu = APU::new(48_000);
 
         apu.channel4.nrx3 = 0;
         assert_eq!(apu.read_byte(0xFF22), 0);
@@ -587,7 +617,7 @@ mod tests {
 
     #[test]
     fn test_read_nr44() {
-        let mut apu = APU::new();
+        let mut apu = APU::new(48_000);
 
         apu.channel4.nrx4 = 0;
         assert_eq!(apu.read_byte(0xFF23), 0b1011_1111);
@@ -598,7 +628,7 @@ mod tests {
 
     #[test]
     fn test_read_nr52_channel_enabled() {
-        let mut apu = APU::new();
+        let mut apu = APU::new(48_000);
 
         apu.write_byte(0xFF26, 0);
 
@@ -619,7 +649,7 @@ mod tests {
 
     #[test]
     fn test_nr51() {
-        let mut apu = APU::new();
+        let mut apu = APU::new(48_000);
 
         apu.write_byte(0xFF25, 0);
         assert_eq!(apu.read_byte(0xFF25), 0);
@@ -633,7 +663,7 @@ mod tests {
 
     #[test]
     fn test_nr50() {
-        let mut apu = APU::new();
+        let mut apu = APU::new(48_000);
 
         apu.write_byte(0xFF24, 0);
         assert_eq!(apu.read_byte(0xFF24), 0);

@@ -12,10 +12,10 @@ pub struct Gameboy {
 }
 
 impl Gameboy {
-    pub fn new(rom: Vec<u8>) -> Self {
+    pub fn new(rom: Vec<u8>, audio_sample_rate: u32) -> Self {
         Gameboy {
             cpu: CPU::new(),
-            mmu: MMU::new(Cartridge::new(rom)),
+            mmu: MMU::new(Cartridge::new(rom), audio_sample_rate),
             booting: true,
         }
     }
@@ -51,6 +51,12 @@ impl Gameboy {
 
     pub fn release_button(&mut self, button: Button) {
         self.mmu.joypad.release_button(button);
+    }
+
+    /// Gets the samples since the last call and clears them to prepare a fresh batch.
+    /// Returns the samples as interleaved stereo, starting with the left channel.
+    pub fn take_samples(&mut self) -> Vec<f32> {
+        std::mem::take(&mut self.mmu.apu.samples)
     }
 
     pub fn get_frame(&mut self) -> [u8; 160 * 144] {
